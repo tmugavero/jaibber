@@ -35,6 +35,10 @@ pub async fn run_claude(
 [ -f "$HOME/.profile" ] && . "$HOME/.profile" 2>/dev/null
 [ -f "$HOME/.zshrc" ] && . "$HOME/.zshrc" 2>/dev/null
 export PATH="$PATH:/usr/local/bin:/usr/bin"
+# Windows: add Claude Code install dir (version-agnostic glob)
+for _d in "$HOME/AppData/Roaming/Claude/claude-code"/*/; do
+  [ -d "$_d" ] && export PATH="$PATH:$_d"
+done
 claude --print --dangerously-skip-permissions '{safe_prompt}'"#
     );
 
