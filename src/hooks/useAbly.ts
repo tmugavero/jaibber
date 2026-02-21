@@ -91,7 +91,7 @@ function connectAbly(
             useChatStore.getState().addMessage({
               id: responseId,
               conversationId: convId,
-              sender: "me",
+              sender: "them",
               senderName: "Claude",
               text: "",
               timestamp: new Date().toISOString(),

@@ -1,9 +1,16 @@
 import { useState } from "react";
+import { Store } from "@tauri-apps/plugin-store";
 import { useProjectStore } from "@/stores/projectStore";
 import { useContactStore } from "@/stores/contactStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import type { LocalProject } from "@/stores/projectStore";
+
+async function saveProjects(projects: LocalProject[]) {
+  const store = await Store.load("jaibber.json");
+  await store.set("local_projects", projects);
+  await store.save();
+}
 
 export function ProjectsPanel() {
   const projects = useProjectStore((s) => s.projects);
@@ -43,6 +50,7 @@ export function ProjectsPanel() {
       ablyChannelName: contact.ablyChannelName,
     };
     addProject(lp);
+    saveProjects(useProjectStore.getState().projects);
     setSelectedProjectId("");
     setProjectDir("");
     setAdding(false);
@@ -82,12 +90,14 @@ export function ProjectsPanel() {
       });
 
       // Register locally with the project dir
-      addProject({
+      const newLocal = {
         projectId: p.id,
         name: p.name,
         projectDir: newProjectDir.trim(),
         ablyChannelName: p.ablyChannelName,
-      });
+      };
+      addProject(newLocal);
+      saveProjects(useProjectStore.getState().projects);
 
       setNewProjectName("");
       setNewProjectDescription("");
@@ -122,7 +132,7 @@ export function ProjectsPanel() {
                 <div className="text-xs text-muted-foreground font-mono truncate">{p.projectDir}</div>
               </div>
               <button
-                onClick={() => removeProject(p.projectId)}
+                onClick={() => { removeProject(p.projectId); saveProjects(useProjectStore.getState().projects.filter(x => x.projectId !== p.projectId)); }}
                 className="text-xs text-destructive hover:text-destructive/80 transition-colors flex-shrink-0 mt-0.5"
                 title="Remove from this machine"
               >
