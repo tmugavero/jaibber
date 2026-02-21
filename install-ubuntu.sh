@@ -3,9 +3,17 @@
 # Jaibber — Ubuntu install script
 # Sets up all prerequisites and runs the app in dev mode.
 # Tested on Ubuntu 22.04+ and Debian 12+.
-# Usage: bash install-ubuntu.sh
+# Usage: bash install-ubuntu.sh   (do NOT run with sudo)
 # ──────────────────────────────────────────────────────────────────────────────
 set -e
+
+# Guard: never run this script as root — npm install as root causes permission
+# errors on node_modules/.vite that prevent Vite from starting.
+if [ "$EUID" -eq 0 ]; then
+  echo "Error: do not run this script as root / with sudo."
+  echo "Run as your normal user: bash install-ubuntu.sh"
+  exit 1
+fi
 
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
