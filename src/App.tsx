@@ -50,29 +50,49 @@ function App() {
           return;
         }
 
-        // ── 3. Load settings from Rust (apiBaseUrl, anthropicApiKey, machineName)
+        // ── 3. Load settings from Rust; fall back to JS store if apiBaseUrl missing
         const settings = await getSettings();
-        useSettingsStore.getState().setSettings(settings);
+        let { apiBaseUrl } = settings;
 
-        const { apiBaseUrl } = settings;
         if (!apiBaseUrl) {
-          // No server URL configured yet — show login to pick it up
-          setBootState("login");
-          return;
+          // Rust settings lost (can happen on webview reload) — try JS store fallback
+          const savedUrl = await store.get<string>("api_base_url");
+          if (savedUrl) {
+            apiBaseUrl = savedUrl;
+            const recovered = { ...settings, apiBaseUrl: savedUrl };
+            useSettingsStore.getState().setSettings(recovered);
+            await saveSettings(recovered);
+          } else {
+            setBootState("login");
+            return;
+          }
+        } else {
+          useSettingsStore.getState().setSettings(settings);
         }
 
         // ── 4. Validate token against server ──────────────────────────────
-        const meRes = await fetch(`${apiBaseUrl}/api/auth/me`, {
-          headers: { Authorization: `Bearer ${authData.token}` },
-        });
-        if (!meRes.ok) {
-          await store.delete("auth");
-          await store.save();
-          setBootState("login");
-          return;
+        // Only force logout on a definitive 401 — network errors keep the user logged in
+        try {
+          const meRes = await fetch(`${apiBaseUrl}/api/auth/me`, {
+            headers: { Authorization: `Bearer ${authData.token}` },
+          });
+          if (meRes.status === 401 || meRes.status === 403) {
+            await store.delete("auth");
+            await store.save();
+            setBootState("login");
+            return;
+          }
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            useAuthStore.getState().setAuth(authData.token, meData.userId, meData.username);
+          } else {
+            // Server error — continue with cached identity
+            useAuthStore.getState().setAuth(authData.token, authData.userId, authData.username);
+          }
+        } catch {
+          // Network unreachable — continue with cached identity (offline mode)
+          useAuthStore.getState().setAuth(authData.token, authData.userId, authData.username);
         }
-        const meData = await meRes.json();
-        useAuthStore.getState().setAuth(authData.token, meData.userId, meData.username);
 
         // ── 5. Load contacts (projects) from server ────────────────────────
         await useContactStore.getState().loadFromServer(apiBaseUrl, authData.token);
@@ -104,6 +124,7 @@ function App() {
     try {
       const store = await Store.load("jaibber.json");
       await store.set("auth", { token: auth.token, userId: auth.userId, username: auth.username });
+      await store.set("api_base_url", settings.apiBaseUrl);
       await store.save();
       await saveSettings(settings);
 
