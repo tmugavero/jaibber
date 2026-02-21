@@ -9,26 +9,31 @@ function App() {
   const [setupDone, setSetupDone] = useState<boolean | null>(null);
 
   useEffect(() => {
-    Promise.all([isSetupComplete(), getSettings()])
-      .then(([done, settings]) => {
-        // Use getState() — never subscribe this component to store changes
+    // Run sequentially: isSetupComplete loads settings into Rust state,
+    // then getSettings reads that state. Running in parallel caused a race
+    // where getSettings returned empty defaults before the store was loaded.
+    (async () => {
+      try {
+        const done = await isSetupComplete();
+        const settings = await getSettings();
         useSettingsStore.getState().setSetupComplete(done);
         useSettingsStore.getState().setSettings(settings);
         setSetupDone(done);
-      })
-      .catch(() => setSetupDone(false));
+      } catch {
+        setSetupDone(false);
+      }
+    })();
   }, []);
 
   if (setupDone === null) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
-        <div className="text-muted-foreground text-sm animate-pulse">Loading...</div>
+        <div className="text-muted-foreground text-sm animate-pulse">Loading…</div>
       </div>
     );
   }
 
   if (!setupDone) {
-    // Pass onComplete as a plain callback — no Zustand subscription in App
     return <SetupWizard onComplete={() => setSetupDone(true)} />;
   }
 
