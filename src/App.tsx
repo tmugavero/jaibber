@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 import { isSetupComplete, getSettings } from "@/lib/tauri";
+import { loadMessages } from "@/lib/chatPersistence";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useChatStore } from "@/stores/chatStore";
 import { AppShell } from "@/components/layout/AppShell";
 import { SetupWizard } from "@/components/setup/SetupWizard";
 
@@ -16,8 +18,10 @@ function App() {
       try {
         const done = await isSetupComplete();
         const settings = await getSettings();
+        const messages = await loadMessages();
         useSettingsStore.getState().setSetupComplete(done);
         useSettingsStore.getState().setSettings(settings);
+        useChatStore.getState().loadMessages(messages);
         setSetupDone(done);
       } catch {
         setSetupDone(false);
