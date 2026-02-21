@@ -1,0 +1,86 @@
+name: Release Jaibber
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            nats_asset: nats-server-v2.10.24-windows-amd64.zip
+            nats_binary: nats-server.exe
+            output_name: nats-server-x86_64-pc-windows-msvc.exe
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            nats_asset: nats-server-v2.10.24-darwin-amd64.zip
+            nats_binary: nats-server
+            output_name: nats-server-x86_64-apple-darwin
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            nats_asset: nats-server-v2.10.24-darwin-arm64.zip
+            nats_binary: nats-server
+            output_name: nats-server-aarch64-apple-darwin
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            nats_asset: nats-server-v2.10.24-linux-amd64.zip
+            nats_binary: nats-server
+            output_name: nats-server-x86_64-unknown-linux-gnu
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download NATS server binary
+        shell: bash
+        run: |
+          curl -Lo nats.zip "https://github.com/nats-io/nats-server/releases/download/v2.10.24/${{ matrix.nats_asset }}"
+          unzip nats.zip
+          find . -name "${{ matrix.nats_binary }}" -not -path "./.git/*" | head -1 | xargs -I{} cp {} src-tauri/binaries/${{ matrix.output_name }}
+          chmod +x src-tauri/binaries/${{ matrix.output_name }} 2>/dev/null || true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev pkg-config
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Jaibber ${{ github.ref_name }}'
+          releaseBody: 'Cross-network LLM agent coordination hub'
+          releaseDraft: true
+          prerelease: false
+          args: --target ${{ matrix.target }}
