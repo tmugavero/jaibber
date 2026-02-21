@@ -12,5 +12,5 @@ export interface AblyMessage {
   to: string;
   text: string;
   messageId: string;
-  type: "message" | "response" | "typing" | "done";
+  type: "message" | "response" | "typing" | "done" | "error";
 }

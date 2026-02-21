@@ -115,7 +115,7 @@ export function useAbly() {
             useChatStore.getState().appendChunk(convId, responseId, result);
             useChatStore.getState().markDone(convId, responseId);
 
-            // Send response back
+            // Send response back to sender
             senderDmChannel?.publish("message", {
               from: myHandle,
               to: payload.from,
@@ -124,9 +124,18 @@ export function useAbly() {
               type: "response",
             } satisfies AblyMessage);
           } catch (err) {
-            const errText = `Error: ${err}`;
+            const errText = `⚠️ Agent error: ${err}`;
+            // Show error locally on agent side
             useChatStore.getState().appendChunk(convId, responseId, errText);
             useChatStore.getState().updateStatus(convId, responseId, "error");
+            // Send error back to hub so it stops hanging
+            senderDmChannel?.publish("message", {
+              from: myHandle,
+              to: payload.from,
+              text: errText,
+              messageId: responseId,
+              type: "error",
+            } satisfies AblyMessage);
           }
         }
       } else if (payload.type === "typing") {
@@ -145,15 +154,16 @@ export function useAbly() {
             status: "streaming",
           });
         }
-      } else if (payload.type === "response" || payload.type === "done") {
-        // Remove typing indicator and add real message
+      } else if (payload.type === "response" || payload.type === "done" || payload.type === "error") {
+        const isError = payload.type === "error";
+        // Replace typing indicator with real message (or error)
         const convMessages = useChatStore.getState().messages[convId] ?? [];
         const typingMsg = convMessages.find(
           (m) => m.id === `typing-${payload.from}`
         );
         if (typingMsg) {
-          useChatStore.getState().updateStatus(convId, typingMsg.id, "done");
           useChatStore.getState().appendChunk(convId, typingMsg.id, payload.text);
+          useChatStore.getState().updateStatus(convId, typingMsg.id, isError ? "error" : "done");
         } else {
           useChatStore.getState().addMessage({
             id: payload.messageId,
@@ -161,7 +171,7 @@ export function useAbly() {
             sender: "them",
             text: payload.text,
             timestamp: new Date().toISOString(),
-            status: "done",
+            status: isError ? "error" : "done",
           });
         }
       }
