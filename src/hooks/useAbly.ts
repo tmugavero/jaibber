@@ -77,8 +77,10 @@ function connectAbly(
           status: "done",
         });
 
-        // If this machine has the project registered locally → act as responder
-        if (!isMine) {
+        // If this machine has the project registered locally → act as responder.
+        // No isMine check: on a single-machine setup the user and agent share the same account.
+        // chatStore already deduplicates sent messages by id so no doubles occur.
+        {
           const localProject = useProjectStore.getState().projects.find(
             (p) => p.projectId === contact.id
           );
