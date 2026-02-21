@@ -2,6 +2,7 @@ import { useState } from "react";
 import { open } from "@tauri-apps/plugin-shell";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { saveSettings } from "@/lib/tauri";
 import { cn } from "@/lib/cn";
 
 interface Props {
@@ -46,10 +47,9 @@ export function LoginScreen({ onLogin }: Props) {
         return;
       }
       useAuthStore.getState().setAuth(data.token, data.userId, data.username);
-      useSettingsStore.getState().setSettings({
-        ...useSettingsStore.getState().settings,
-        apiBaseUrl,
-      });
+      const updatedSettings = { ...useSettingsStore.getState().settings, apiBaseUrl };
+      useSettingsStore.getState().setSettings(updatedSettings);
+      await saveSettings(updatedSettings);
       onLogin();
     } catch (e) {
       setError(`Network error: ${e}`);
@@ -85,10 +85,9 @@ export function LoginScreen({ onLogin }: Props) {
         return;
       }
       useAuthStore.getState().setAuth(trimmed, data.userId, data.username);
-      useSettingsStore.getState().setSettings({
-        ...useSettingsStore.getState().settings,
-        apiBaseUrl,
-      });
+      const updatedSettings = { ...useSettingsStore.getState().settings, apiBaseUrl };
+      useSettingsStore.getState().setSettings(updatedSettings);
+      await saveSettings(updatedSettings);
       onLogin();
     } catch (e) {
       setError(`Network error: ${e}`);

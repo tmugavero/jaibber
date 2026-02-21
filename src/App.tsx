@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 import { Store } from "@tauri-apps/plugin-store";
-import { getSettings } from "@/lib/tauri";
+import { getSettings, saveSettings } from "@/lib/tauri";
 import { loadMessages } from "@/lib/chatPersistence";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
@@ -19,6 +19,15 @@ type BootState = "loading" | "login" | "app";
 
 function App() {
   const [bootState, setBootState] = useState<BootState>("loading");
+
+  // Auto-save local projects to disk whenever the list changes
+  useEffect(() => {
+    return useProjectStore.subscribe(async (state) => {
+      const store = await Store.load("jaibber.json");
+      await store.set("local_projects", state.projects);
+      await store.save();
+    });
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -96,6 +105,7 @@ function App() {
       const store = await Store.load("jaibber.json");
       await store.set("auth", { token: auth.token, userId: auth.userId, username: auth.username });
       await store.save();
+      await saveSettings(settings);
 
       // Load contacts with the new token
       if (settings.apiBaseUrl) {
