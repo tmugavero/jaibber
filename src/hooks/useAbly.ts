@@ -76,6 +76,7 @@ function connectAbly(ablyApiKey: string, myHandle: string, myMode: string, proje
       if (myMode === "agent" && projectDir) {
         const responseId = uuidv4();
 
+        // Add a local streaming bubble for the response-in-progress
         useChatStore.getState().addMessage({
           id: responseId,
           conversationId: convId,
@@ -120,13 +121,13 @@ function connectAbly(ablyApiKey: string, myHandle: string, myMode: string, proje
         }
       }
     } else if (payload.type === "typing") {
+      // Only add typing indicator if there isn't already one for this sender
+      const typingId = `typing-${payload.from}`;
       const convMessages = useChatStore.getState().messages[convId] ?? [];
-      const hasTyping = convMessages.some(
-        (m) => m.sender === "them" && m.status === "streaming"
-      );
+      const hasTyping = convMessages.some((m) => m.id === typingId);
       if (!hasTyping) {
         useChatStore.getState().addMessage({
-          id: `typing-${payload.from}`,
+          id: typingId,
           conversationId: convId,
           sender: "them",
           text: "",
@@ -136,12 +137,16 @@ function connectAbly(ablyApiKey: string, myHandle: string, myMode: string, proje
       }
     } else if (payload.type === "response" || payload.type === "done" || payload.type === "error") {
       const isError = payload.type === "error";
+      const typingId = `typing-${payload.from}`;
       const convMessages = useChatStore.getState().messages[convId] ?? [];
-      const typingMsg = convMessages.find((m) => m.id === `typing-${payload.from}`);
+      const typingMsg = convMessages.find((m) => m.id === typingId);
       if (typingMsg) {
-        useChatStore.getState().appendChunk(convId, typingMsg.id, payload.text);
-        useChatStore.getState().updateStatus(convId, typingMsg.id, isError ? "error" : "done");
+        // Replace the typing bubble with the actual response
+        useChatStore.getState().appendChunk(convId, typingId, payload.text);
+        useChatStore.getState().updateStatus(convId, typingId, isError ? "error" : "done");
       } else {
+        // No typing bubble found — use the messageId as dedup key
+        // addMessage will ignore it if already exists (e.g. agent's own local bubble)
         useChatStore.getState().addMessage({
           id: payload.messageId,
           conversationId: convId,

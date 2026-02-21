@@ -12,12 +12,17 @@ interface ChatStore {
 export const useChatStore = create<ChatStore>((set) => ({
   messages: {},
   addMessage: (msg) =>
-    set((s) => ({
-      messages: {
-        ...s.messages,
-        [msg.conversationId]: [...(s.messages[msg.conversationId] ?? []), msg],
-      },
-    })),
+    set((s) => {
+      const existing = s.messages[msg.conversationId] ?? [];
+      // Dedup by messageId — Ably delivers messages to the publisher too, causing doubles
+      if (existing.some((m) => m.id === msg.id)) return s;
+      return {
+        messages: {
+          ...s.messages,
+          [msg.conversationId]: [...existing, msg],
+        },
+      };
+    }),
   appendChunk: (conversationId, messageId, chunk) =>
     set((s) => {
       const msgs = s.messages[conversationId] ?? [];
