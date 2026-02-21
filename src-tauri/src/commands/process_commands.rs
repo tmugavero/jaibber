@@ -64,6 +64,13 @@ claude --print --dangerously-skip-permissions '{safe_prompt}'"#
     if output.status.success() {
         Ok(stdout)
     } else {
+        if stderr.contains("command not found") || stderr.contains("not recognized") {
+            return Err(JaibberError::Shell(
+                "Claude Code is not installed or not on PATH.\n\
+                Install it with: npm install -g @anthropic-ai/claude-code\n\
+                Then restart Jaibber.".into()
+            ));
+        }
         let code = output.status.code().map(|c| c.to_string()).unwrap_or_else(|| "?".to_string());
         Err(JaibberError::Shell(format!(
             "claude exited with code {code}\nstderr: {stderr}\nstdout: {stdout}"
