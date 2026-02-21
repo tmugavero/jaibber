@@ -1,87 +1,66 @@
 use tauri::State;
 use std::sync::Arc;
-use std::path::PathBuf;
 use crate::state::AppState;
 use crate::error::JaibberError;
 
-/// Find the `claude` binary, checking common install locations since
-/// Tauri spawns processes with a minimal PATH that may not include
-/// nvm/npm global bin dirs.
-fn find_claude() -> Option<PathBuf> {
-    // 1. Check PATH first (works on Windows and some Linux setups)
-    if let Ok(path) = which::which("claude") {
-        return Some(path);
-    }
-
-    // 2. Common locations where `npm install -g` puts binaries on Linux/macOS
-    let home = std::env::var("HOME").unwrap_or_default();
-    let candidates = vec![
-        // nvm default
-        format!("{home}/.nvm/versions/node/$(ls {home}/.nvm/versions/node/ 2>/dev/null | sort -V | tail -1)/bin/claude"),
-        format!("{home}/.nvm/versions/node/v22.22.0/bin/claude"),
-        format!("{home}/.nvm/versions/node/v22.0.0/bin/claude"),
-        format!("{home}/.nvm/versions/node/v20.0.0/bin/claude"),
-        // npm global without nvm
-        format!("{home}/.npm-global/bin/claude"),
-        format!("{home}/.local/bin/claude"),
-        // system npm
-        "/usr/local/bin/claude".to_string(),
-        "/usr/bin/claude".to_string(),
-    ];
-
-    for path in candidates {
-        let p = PathBuf::from(&path);
-        if p.exists() {
-            return Some(p);
-        }
-    }
-
-    None
-}
-
-/// Spawns `claude --print "<prompt>"` in the configured project_dir.
-/// Returns the full stdout of the claude process.
+/// Spawns `claude --print "<prompt>"` via bash -c so that the user's full
+/// shell environment (nvm, PATH, etc.) is available — Tauri's shell plugin
+/// strips the environment when spawning, causing Claude Code to hang.
+///
+/// We use tokio::process::Command directly instead of tauri-plugin-shell
+/// for the same reason.
 #[tauri::command]
 pub async fn run_claude(
     prompt: String,
     state: State<'_, Arc<AppState>>,
-    app: tauri::AppHandle,
 ) -> Result<String, JaibberError> {
-    use tauri_plugin_shell::ShellExt;
-
-    let project_dir = {
+    let (project_dir, anthropic_key) = {
         let settings = state.settings.read().await;
-        settings.project_dir.clone()
+        (settings.project_dir.clone(), settings.anthropic_api_key.clone())
     };
 
     let dir = project_dir.ok_or_else(|| {
         JaibberError::Other("No project directory configured".into())
     })?;
 
-    // Try to find the claude binary explicitly
-    let claude_bin = find_claude()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| "claude".to_string());
+    // Escape any single-quotes in the prompt so it's safe inside bash -c '...'
+    let safe_prompt = prompt.replace('\'', "'\''");
 
-    let output = app
-        .shell()
-        .command(&claude_bin)
-        .args(["--print", &prompt])
-        .current_dir(&dir)
-        .output()
-        .await
-        .map_err(|e| JaibberError::Shell(format!(
-            "Failed to spawn claude (tried: {claude_bin}): {e}"
-        )))?;
+    // Build the bash command:
+    // - Source nvm and common profile files so PATH includes nvm node/claude
+    // - Use --print and --dangerously-skip-permissions (no TTY available)
+    let bash_cmd = format!(
+        r#"export NVM_DIR="$HOME/.nvm"; \
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; \
+[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc" 2>/dev/null; \
+[ -f "$HOME/.profile" ] && . "$HOME/.profile" 2>/dev/null; \
+claude --print --dangerously-skip-permissions '{safe_prompt}'"#
+    );
+
+    let mut cmd = tokio::process::Command::new("bash");
+    cmd.arg("-c")
+       .arg(&bash_cmd)
+       .current_dir(&dir)
+       .stdout(std::process::Stdio::piped())
+       .stderr(std::process::Stdio::piped());
+
+    // Pass ANTHROPIC_API_KEY if we have it stored
+    if let Some(key) = anthropic_key {
+        if !key.is_empty() {
+            cmd.env("ANTHROPIC_API_KEY", key);
+        }
+    }
+
+    let output = cmd.output().await
+        .map_err(|e| JaibberError::Shell(format!("Failed to spawn bash: {e}")))?;
 
     if output.status.success() {
-        let text = String::from_utf8_lossy(&output.stdout).to_string();
-        Ok(text)
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         Err(JaibberError::Shell(format!(
-            "claude exited with error.\nstderr: {stderr}\nstdout: {stdout}"
+            "claude error\nstderr: {stderr}\nstdout: {stdout}"
         )))
     }
 }
