@@ -83,10 +83,12 @@ fi
 
 # ── 5. Project dependencies ───────────────────────────────────────────────────
 step "Installing npm dependencies..."
+# Fix ownership BEFORE npm install — if node_modules exists but is owned by root
+# (from a previous sudo run), npm install will fail with EACCES immediately.
+if [ -d "node_modules" ]; then
+  sudo chown -R "$USER":"$USER" node_modules
+fi
 npm install
-# Fix ownership in case anything in node_modules ended up owned by root
-# (can happen if npm was previously run with sudo — prevents Vite EACCES errors)
-sudo chown -R "$USER":"$USER" node_modules 2>/dev/null || true
 ok "npm packages installed"
 
 # ── 6. Done ───────────────────────────────────────────────────────────────────
