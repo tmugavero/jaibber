@@ -15,7 +15,8 @@ export function SettingsPage() {
       await saveSettings(form);
       useSettingsStore.getState().setSettings(form);
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      // Reload the app so Ably reconnects with the new handle
+      setTimeout(() => window.location.reload(), 1000);
     } finally {
       setSaving(false);
     }
@@ -34,7 +35,8 @@ export function SettingsPage() {
             type="text"
             value={form.myHandle}
             onChange={(e) => setForm({ ...form, myHandle: e.target.value })}
-            className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+            placeholder="e.g. my-laptop, ubuntu-agent"
+            className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
           />
         </div>
 
@@ -61,7 +63,7 @@ export function SettingsPage() {
               type="text"
               value={form.projectDir ?? ""}
               onChange={(e) => setForm({ ...form, projectDir: e.target.value || null })}
-              placeholder="C:\Users\you\Code\my-project"
+              placeholder="/home/user/Code/my-project"
               className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
             />
           </div>
@@ -81,7 +83,7 @@ export function SettingsPage() {
 
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-            Anthropic API Key
+            Anthropic API Key <span className="font-normal opacity-60">(optional — agent mode only)</span>
           </label>
           <input
             type="password"
@@ -97,7 +99,7 @@ export function SettingsPage() {
           disabled={saving}
           className="w-full bg-primary text-primary-foreground rounded-xl py-2.5 text-sm font-semibold hover:bg-primary/90 transition-all disabled:opacity-50"
         >
-          {saved ? "✓ Saved" : saving ? "Saving…" : "Save Settings"}
+          {saved ? "Saved — reloading…" : saving ? "Saving…" : "Save Settings"}
         </button>
       </div>
     </div>
