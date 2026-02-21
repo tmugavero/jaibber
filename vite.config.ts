@@ -5,6 +5,12 @@ import path from "path";
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
+// On Linux, Tauri's WebView runs as a separate process and needs Vite to bind
+// to 0.0.0.0. On Windows we force 127.0.0.1 to avoid IPv6 TIME_WAIT grief.
+// @ts-expect-error process is a nodejs global
+const isWindows = process.platform === "win32";
+const viteHost = host || (isWindows ? "127.0.0.1" : "0.0.0.0");
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react()],
@@ -22,7 +28,7 @@ export default defineConfig(async () => ({
   server: {
     port: 5174,
     strictPort: true,
-    host: host || "127.0.0.1",
+    host: viteHost,
     hmr: host
       ? {
           protocol: "ws",
