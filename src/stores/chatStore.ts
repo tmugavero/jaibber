@@ -4,6 +4,7 @@ import type { Message } from "@/types/message";
 interface ChatStore {
   messages: Record<string, Message[]>;  // key = conversationId
   addMessage: (msg: Message) => void;
+  replaceMessage: (conversationId: string, messageId: string, text: string, status: Message["status"]) => void;
   appendChunk: (conversationId: string, messageId: string, chunk: string) => void;
   markDone: (conversationId: string, messageId: string) => void;
   updateStatus: (conversationId: string, messageId: string, status: Message["status"]) => void;
@@ -20,6 +21,18 @@ export const useChatStore = create<ChatStore>((set) => ({
         messages: {
           ...s.messages,
           [msg.conversationId]: [...existing, msg],
+        },
+      };
+    }),
+  replaceMessage: (conversationId, messageId, text, status) =>
+    set((s) => {
+      const msgs = s.messages[conversationId] ?? [];
+      return {
+        messages: {
+          ...s.messages,
+          [conversationId]: msgs.map((m) =>
+            m.id === messageId ? { ...m, text, status } : m
+          ),
         },
       };
     }),

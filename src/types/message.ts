@@ -1,6 +1,6 @@
 export interface Message {
   id: string;
-  conversationId: string;  // = contact.id
+  conversationId: string;
   sender: "me" | "them";
   text: string;
   timestamp: string;
@@ -13,4 +13,5 @@ export interface AblyMessage {
   text: string;
   messageId: string;
   type: "message" | "response" | "typing" | "done" | "error";
+  responseId?: string;  // sent in "typing" so hub can pre-create bubble with correct ID
 }

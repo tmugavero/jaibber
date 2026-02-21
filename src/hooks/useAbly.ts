@@ -74,9 +74,11 @@ function connectAbly(ablyApiKey: string, myHandle: string, myMode: string, proje
 
       // Agent mode: forward to claude --print, then reply
       if (myMode === "agent" && projectDir) {
+        // Generate the responseId now — we'll send it in the typing notification
+        // so the hub can pre-create a bubble with the correct ID
         const responseId = uuidv4();
 
-        // Add a local streaming bubble for the response-in-progress
+        // Add local streaming bubble on the agent side
         useChatStore.getState().addMessage({
           id: responseId,
           conversationId: convId,
@@ -87,11 +89,15 @@ function connectAbly(ablyApiKey: string, myHandle: string, myMode: string, proje
         });
 
         const senderDmChannel = getAbly()?.channels.get(`jaibber:dm:${payload.from}`);
+
+        // Tell the hub we're typing — include responseId so it can create
+        // a bubble with the right ID immediately
         senderDmChannel?.publish("message", {
           from: myHandle,
           to: payload.from,
           text: "",
           messageId: uuidv4(),
+          responseId,
           type: "typing",
         } satisfies AblyMessage);
 
@@ -121,41 +127,28 @@ function connectAbly(ablyApiKey: string, myHandle: string, myMode: string, proje
         }
       }
     } else if (payload.type === "typing") {
-      // Only add typing indicator if there isn't already one for this sender
-      const typingId = `typing-${payload.from}`;
-      const convMessages = useChatStore.getState().messages[convId] ?? [];
-      const hasTyping = convMessages.some((m) => m.id === typingId);
-      if (!hasTyping) {
-        useChatStore.getState().addMessage({
-          id: typingId,
-          conversationId: convId,
-          sender: "them",
-          text: "",
-          timestamp: new Date().toISOString(),
-          status: "streaming",
-        });
-      }
+      // Create a streaming bubble using the responseId the agent sent,
+      // so we know exactly which bubble to update when the response arrives.
+      // Fall back to a timestamp-based ID if responseId is missing (old agents).
+      const bubbleId = payload.responseId ?? `typing-${payload.from}-${Date.now()}`;
+      useChatStore.getState().addMessage({
+        id: bubbleId,
+        conversationId: convId,
+        sender: "them",
+        text: "",
+        timestamp: new Date().toISOString(),
+        status: "streaming",
+      });
     } else if (payload.type === "response" || payload.type === "done" || payload.type === "error") {
       const isError = payload.type === "error";
-      const typingId = `typing-${payload.from}`;
-      const convMessages = useChatStore.getState().messages[convId] ?? [];
-      const typingMsg = convMessages.find((m) => m.id === typingId);
-      if (typingMsg) {
-        // Replace the typing bubble with the actual response
-        useChatStore.getState().appendChunk(convId, typingId, payload.text);
-        useChatStore.getState().updateStatus(convId, typingId, isError ? "error" : "done");
-      } else {
-        // No typing bubble found — use the messageId as dedup key
-        // addMessage will ignore it if already exists (e.g. agent's own local bubble)
-        useChatStore.getState().addMessage({
-          id: payload.messageId,
-          conversationId: convId,
-          sender: "them",
-          text: payload.text,
-          timestamp: new Date().toISOString(),
-          status: isError ? "error" : "done",
-        });
-      }
+      // The agent sends responseId as the messageId in response/error payloads.
+      // replaceMessage updates that bubble directly — no static typing-{from} ID needed.
+      useChatStore.getState().replaceMessage(
+        convId,
+        payload.messageId,
+        payload.text,
+        isError ? "error" : "done"
+      );
     }
   });
 
