@@ -25,7 +25,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             settings_commands::get_settings,
             settings_commands::save_settings,
-            settings_commands::is_setup_complete,
             process_commands::run_claude,
         ])
         .run(tauri::generate_context!())

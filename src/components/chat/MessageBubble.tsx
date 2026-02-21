@@ -57,6 +57,9 @@ export function MessageBubble({ message }: Props) {
             isMe ? "text-primary-foreground/60 text-right" : "text-muted-foreground"
           )}
         >
+          {!isMe && message.senderName && (
+            <span className="font-medium mr-1">{message.senderName}</span>
+          )}
           {formatTime(message.timestamp)}
           {isMe && (
             <span className="ml-1">

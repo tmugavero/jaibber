@@ -5,8 +5,7 @@ import type { AppSettings } from "@/types/settings";
 export const getSettings = () => invoke<AppSettings>("get_settings");
 export const saveSettings = (settings: AppSettings) =>
   invoke<void>("save_settings", { settings });
-export const isSetupComplete = () => invoke<boolean>("is_setup_complete");
 
-// Claude process
-export const runClaude = (prompt: string) =>
-  invoke<string>("run_claude", { prompt });
+// Claude process — projectDir is now passed per-call (not stored globally in Rust)
+export const runClaude = (prompt: string, projectDir: string) =>
+  invoke<string>("run_claude", { prompt, projectDir });

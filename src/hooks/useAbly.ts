@@ -4,158 +4,171 @@ import { initAbly, getAbly } from "@/lib/ably";
 import { useContactStore } from "@/stores/contactStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useAuthStore } from "@/stores/authStore";
+import { useProjectStore } from "@/stores/projectStore";
 import { runClaude } from "@/lib/tauri";
 import type { AblyMessage } from "@/types/message";
+import type { Contact } from "@/types/contact";
 
-function connectAbly(ablyApiKey: string, myHandle: string, myMode: string, projectDir: string | null) {
-  const ably = initAbly(ablyApiKey, myHandle);
+function connectAbly(
+  apiBaseUrl: string,
+  userId: string,
+  username: string,
+  contacts: Record<string, Contact>,
+  getToken: () => string | null
+) {
+  const ably = initAbly(apiBaseUrl, userId, getToken);
 
-  // ── Presence channel ───────────────────────────────────────────────────────
+  // ── Global presence channel ───────────────────────────────────────────────
   const presenceChannel = ably.channels.get("jaibber:presence");
-
-  presenceChannel.presence.enter({ mode: myMode });
-
-  presenceChannel.presence.subscribe("enter", (member) => {
-    if (member.clientId === myHandle) return;
-    useContactStore.getState().upsertContact({
-      id: member.clientId,
-      name: member.clientId,
-      mode: (member.data as any)?.mode ?? "hub",
-      isOnline: true,
-      lastSeen: null,
-    });
+  const localProjects = useProjectStore.getState().projects;
+  presenceChannel.presence.enter({
+    userId,
+    username,
+    projectIds: localProjects.map((p) => p.projectId),
   });
 
-  presenceChannel.presence.subscribe("leave", (member) => {
-    if (member.clientId === myHandle) return;
-    useContactStore.getState().setOnline(member.clientId, false);
-  });
+  // ── Per-project channels ──────────────────────────────────────────────────
+  const projectChannels = Object.values(contacts).map((contact) => {
+    const channel = ably.channels.get(contact.ablyChannelName);
 
-  // Hydrate existing presence members
-  presenceChannel.presence.get().then((members) => {
-    members.forEach((member) => {
-      if (member.clientId === myHandle) return;
-      useContactStore.getState().upsertContact({
-        id: member.clientId,
-        name: member.clientId,
-        mode: (member.data as any)?.mode ?? "hub",
-        isOnline: true,
-        lastSeen: null,
-      });
+    // Enter presence on this project channel
+    channel.presence.enter({ userId, username });
+
+    // Track per-project online status via presence
+    channel.presence.subscribe("enter", (member) => {
+      if (member.clientId === userId) return;
+      useContactStore.getState().setOnline(contact.id, true);
     });
-  }).catch(() => {});
-
-  // ── DM channel ─────────────────────────────────────────────────────────────
-  const dmChannel = ably.channels.get(`jaibber:dm:${myHandle}`);
-
-  dmChannel.subscribe(async (msg) => {
-    const payload = msg.data as AblyMessage;
-    if (!payload || payload.to !== myHandle) return;
-
-    const convId = payload.from;
-
-    useContactStore.getState().upsertContact({
-      id: payload.from,
-      name: payload.from,
-      mode: "hub",
-      isOnline: true,
-      lastSeen: null,
+    channel.presence.subscribe("leave", () => {
+      channel.presence.get().then((members) => {
+        const others = members.filter((m) => m.clientId !== userId);
+        if (others.length === 0) {
+          useContactStore.getState().setOnline(contact.id, false);
+        }
+      }).catch(() => {});
     });
 
-    if (payload.type === "message") {
-      useChatStore.getState().addMessage({
-        id: payload.messageId,
-        conversationId: convId,
-        sender: "them",
-        text: payload.text,
-        timestamp: new Date().toISOString(),
-        status: "done",
-      });
+    // Hydrate initial presence state
+    channel.presence.get().then((members) => {
+      const others = members.filter((m) => m.clientId !== userId);
+      if (others.length > 0) {
+        useContactStore.getState().setOnline(contact.id, true);
+      }
+    }).catch(() => {});
 
-      // Agent mode: forward to claude --print, then reply
-      if (myMode === "agent" && projectDir) {
-        // Generate the responseId now — we'll send it in the typing notification
-        // so the hub can pre-create a bubble with the correct ID
-        const responseId = uuidv4();
+    // Subscribe to messages on this project channel
+    channel.subscribe(async (msg) => {
+      const payload = msg.data as AblyMessage;
+      if (!payload || payload.projectId !== contact.id) return;
 
-        // Add local streaming bubble on the agent side
+      const convId = contact.id;
+      const isMine = payload.from === userId;
+
+      if (payload.type === "message") {
+        // All members see all messages (group chat)
         useChatStore.getState().addMessage({
-          id: responseId,
+          id: payload.messageId,
           conversationId: convId,
-          sender: "me",
+          sender: isMine ? "me" : "them",
+          senderName: payload.fromUsername,
+          text: payload.text,
+          timestamp: new Date().toISOString(),
+          status: "done",
+        });
+
+        // If this machine has the project registered locally → act as responder
+        if (!isMine) {
+          const localProject = useProjectStore.getState().projects.find(
+            (p) => p.projectId === contact.id
+          );
+          if (localProject) {
+            const responseId = uuidv4();
+
+            // Add local streaming bubble
+            useChatStore.getState().addMessage({
+              id: responseId,
+              conversationId: convId,
+              sender: "me",
+              senderName: "Claude",
+              text: "",
+              timestamp: new Date().toISOString(),
+              status: "streaming",
+            });
+
+            // Notify all members we're processing
+            channel.publish("message", {
+              from: userId,
+              fromUsername: "Claude",
+              projectId: contact.id,
+              text: "",
+              messageId: uuidv4(),
+              responseId,
+              type: "typing",
+            } satisfies AblyMessage);
+
+            try {
+              const result = await runClaude(payload.text, localProject.projectDir);
+              useChatStore.getState().appendChunk(convId, responseId, result);
+              useChatStore.getState().markDone(convId, responseId);
+
+              channel.publish("message", {
+                from: userId,
+                fromUsername: "Claude",
+                projectId: contact.id,
+                text: result,
+                messageId: responseId,
+                type: "response",
+              } satisfies AblyMessage);
+            } catch (err) {
+              const errText = `⚠️ Agent error: ${err}`;
+              useChatStore.getState().appendChunk(convId, responseId, errText);
+              useChatStore.getState().updateStatus(convId, responseId, "error");
+              channel.publish("message", {
+                from: userId,
+                fromUsername: "Claude",
+                projectId: contact.id,
+                text: errText,
+                messageId: responseId,
+                type: "error",
+              } satisfies AblyMessage);
+            }
+          }
+        }
+      } else if (payload.type === "typing") {
+        if (isMine) return;
+        const bubbleId = payload.responseId ?? `typing-${payload.from}-${Date.now()}`;
+        useChatStore.getState().addMessage({
+          id: bubbleId,
+          conversationId: convId,
+          sender: "them",
+          senderName: payload.fromUsername,
           text: "",
           timestamp: new Date().toISOString(),
           status: "streaming",
         });
-
-        const senderDmChannel = getAbly()?.channels.get(`jaibber:dm:${payload.from}`);
-
-        // Tell the hub we're typing — include responseId so it can create
-        // a bubble with the right ID immediately
-        senderDmChannel?.publish("message", {
-          from: myHandle,
-          to: payload.from,
-          text: "",
-          messageId: uuidv4(),
-          responseId,
-          type: "typing",
-        } satisfies AblyMessage);
-
-        try {
-          const result = await runClaude(payload.text);
-          useChatStore.getState().appendChunk(convId, responseId, result);
-          useChatStore.getState().markDone(convId, responseId);
-
-          senderDmChannel?.publish("message", {
-            from: myHandle,
-            to: payload.from,
-            text: result,
-            messageId: responseId,
-            type: "response",
-          } satisfies AblyMessage);
-        } catch (err) {
-          const errText = `⚠️ Agent error: ${err}`;
-          useChatStore.getState().appendChunk(convId, responseId, errText);
-          useChatStore.getState().updateStatus(convId, responseId, "error");
-          senderDmChannel?.publish("message", {
-            from: myHandle,
-            to: payload.from,
-            text: errText,
-            messageId: responseId,
-            type: "error",
-          } satisfies AblyMessage);
-        }
+      } else if (payload.type === "response" || payload.type === "done" || payload.type === "error") {
+        if (isMine) return;
+        const isError = payload.type === "error";
+        useChatStore.getState().replaceMessage(
+          convId,
+          payload.messageId,
+          payload.text,
+          isError ? "error" : "done"
+        );
       }
-    } else if (payload.type === "typing") {
-      // Create a streaming bubble using the responseId the agent sent,
-      // so we know exactly which bubble to update when the response arrives.
-      // Fall back to a timestamp-based ID if responseId is missing (old agents).
-      const bubbleId = payload.responseId ?? `typing-${payload.from}-${Date.now()}`;
-      useChatStore.getState().addMessage({
-        id: bubbleId,
-        conversationId: convId,
-        sender: "them",
-        text: "",
-        timestamp: new Date().toISOString(),
-        status: "streaming",
-      });
-    } else if (payload.type === "response" || payload.type === "done" || payload.type === "error") {
-      const isError = payload.type === "error";
-      // The agent sends responseId as the messageId in response/error payloads.
-      // replaceMessage updates that bubble directly — no static typing-{from} ID needed.
-      useChatStore.getState().replaceMessage(
-        convId,
-        payload.messageId,
-        payload.text,
-        isError ? "error" : "done"
-      );
-    }
+    });
+
+    return channel;
   });
 
   return () => {
     presenceChannel.presence.leave();
     presenceChannel.unsubscribe();
-    dmChannel.unsubscribe();
+    projectChannels.forEach((ch) => {
+      ch.presence.leave();
+      ch.unsubscribe();
+    });
   };
 }
 
@@ -164,27 +177,37 @@ export function useAbly() {
   const cleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    // Try immediately in case settings are already loaded
     const tryInit = () => {
       if (initializedRef.current) return;
-      const { ablyApiKey, myHandle, myMode, projectDir } = useSettingsStore.getState().settings;
-      if (!ablyApiKey || !myHandle) return;
+      const { userId, username, token } = useAuthStore.getState();
+      const { apiBaseUrl } = useSettingsStore.getState().settings;
+      const contacts = useContactStore.getState().contacts;
+
+      if (!userId || !username || !token || !apiBaseUrl) return;
+      if (Object.keys(contacts).length === 0) return;
+
       initializedRef.current = true;
-      cleanupRef.current = connectAbly(ablyApiKey, myHandle, myMode, projectDir);
+      cleanupRef.current = connectAbly(
+        apiBaseUrl,
+        userId,
+        username,
+        contacts,
+        () => useAuthStore.getState().token
+      );
     };
 
     tryInit();
 
-    // Also subscribe to store changes — handles the race where AppShell mounts
-    // before the async Tauri settings load completes
-    const unsub = useSettingsStore.subscribe((state) => {
-      if (!initializedRef.current && state.settings.ablyApiKey && state.settings.myHandle) {
-        tryInit();
-      }
+    const unsubAuth = useAuthStore.subscribe(() => {
+      if (!initializedRef.current) tryInit();
+    });
+    const unsubContacts = useContactStore.subscribe(() => {
+      if (!initializedRef.current) tryInit();
     });
 
     return () => {
-      unsub();
+      unsubAuth();
+      unsubContacts();
       cleanupRef.current?.();
       initializedRef.current = false;
       cleanupRef.current = null;
@@ -192,36 +215,39 @@ export function useAbly() {
   }, []);
 }
 
-/** Send a chat message to a contact. Returns the local message id. */
-export function sendMessage(toHandle: string, text: string): string {
+/** Send a chat message to a project channel. Returns the local message id. */
+export function sendMessage(projectId: string, text: string): string {
   const ably = getAbly();
-  const myHandle = useSettingsStore.getState().settings.myHandle;
+  const { userId, username } = useAuthStore.getState();
+  const contact = useContactStore.getState().contacts[projectId];
   const messageId = uuidv4();
 
   useChatStore.getState().addMessage({
     id: messageId,
-    conversationId: toHandle,
+    conversationId: projectId,
     sender: "me",
+    senderName: username ?? "me",
     text,
     timestamp: new Date().toISOString(),
     status: "sending",
   });
 
-  if (ably) {
-    const channel = ably.channels.get(`jaibber:dm:${toHandle}`);
+  if (ably && contact && userId && username) {
+    const channel = ably.channels.get(contact.ablyChannelName);
     channel.publish("message", {
-      from: myHandle,
-      to: toHandle,
+      from: userId,
+      fromUsername: username,
+      projectId,
       text,
       messageId,
       type: "message",
     } satisfies AblyMessage).then(() => {
-      useChatStore.getState().updateStatus(toHandle, messageId, "sent");
+      useChatStore.getState().updateStatus(projectId, messageId, "sent");
     }).catch(() => {
-      useChatStore.getState().updateStatus(toHandle, messageId, "error");
+      useChatStore.getState().updateStatus(projectId, messageId, "error");
     });
   } else {
-    useChatStore.getState().updateStatus(toHandle, messageId, "error");
+    useChatStore.getState().updateStatus(projectId, messageId, "error");
   }
 
   return messageId;

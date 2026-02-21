@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useAuthStore } from "@/stores/authStore";
 import { saveSettings } from "@/lib/tauri";
 import type { AppSettings } from "@/types/settings";
 
 export function SettingsPage() {
   const settings = useSettingsStore((s) => s.settings);
+  const username = useAuthStore((s) => s.username);
   const [form, setForm] = useState<AppSettings>(settings);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -15,75 +17,58 @@ export function SettingsPage() {
       await saveSettings(form);
       useSettingsStore.getState().setSettings(form);
       setSaved(true);
-      // Reload the app so Ably reconnects with the new handle
-      setTimeout(() => window.location.reload(), 1000);
+      setTimeout(() => setSaved(false), 2000);
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSignOut = () => {
+    useAuthStore.getState().clearAuth();
+    window.location.reload();
   };
 
   return (
     <div className="p-6 max-w-lg space-y-6">
       <h1 className="text-xl font-semibold text-foreground">Settings</h1>
 
+      {/* Account info */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+        <h2 className="text-sm font-medium text-foreground">Account</h2>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-medium text-foreground">{username}</div>
+            <div className="text-xs text-muted-foreground">Signed in</div>
+          </div>
+          <button
+            onClick={handleSignOut}
+            className="text-xs text-destructive hover:text-destructive/80 transition-colors border border-destructive/30 rounded-lg px-3 py-1.5"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+
+      {/* Machine settings */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+        <h2 className="text-sm font-medium text-foreground">This Machine</h2>
+
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-            Handle (machine name)
+            Machine name <span className="font-normal opacity-60">(cosmetic label)</span>
           </label>
           <input
             type="text"
-            value={form.myHandle}
-            onChange={(e) => setForm({ ...form, myHandle: e.target.value })}
-            placeholder="e.g. my-laptop, ubuntu-agent"
+            value={form.machineName}
+            onChange={(e) => setForm({ ...form, machineName: e.target.value })}
+            placeholder="e.g. dev-laptop, ubuntu-agent"
             className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
           />
         </div>
 
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-            Mode
-          </label>
-          <select
-            value={form.myMode}
-            onChange={(e) => setForm({ ...form, myMode: e.target.value as "hub" | "agent" })}
-            className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
-          >
-            <option value="hub">Hub — send commands to agents</option>
-            <option value="agent">Agent — execute Claude commands</option>
-          </select>
-        </div>
-
-        {form.myMode === "agent" && (
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Project directory
-            </label>
-            <input
-              type="text"
-              value={form.projectDir ?? ""}
-              onChange={(e) => setForm({ ...form, projectDir: e.target.value || null })}
-              placeholder="/home/user/Code/my-project"
-              className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
-            />
-          </div>
-        )}
-
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-            Ably API Key
-          </label>
-          <input
-            type="text"
-            value={form.ablyApiKey ?? ""}
-            onChange={(e) => setForm({ ...form, ablyApiKey: e.target.value || null })}
-            className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-            Anthropic API Key <span className="font-normal opacity-60">(optional — agent mode only)</span>
+            Anthropic API Key <span className="font-normal opacity-60">(optional — needed to run Claude locally)</span>
           </label>
           <input
             type="password"
@@ -94,12 +79,25 @@ export function SettingsPage() {
           />
         </div>
 
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+            Server URL
+          </label>
+          <input
+            type="text"
+            value={form.apiBaseUrl}
+            onChange={(e) => setForm({ ...form, apiBaseUrl: e.target.value.replace(/\/$/, "") })}
+            placeholder="https://jaibber-server.vercel.app"
+            className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+          />
+        </div>
+
         <button
           onClick={handleSave}
           disabled={saving}
           className="w-full bg-primary text-primary-foreground rounded-xl py-2.5 text-sm font-semibold hover:bg-primary/90 transition-all disabled:opacity-50"
         >
-          {saved ? "Saved — reloading…" : saving ? "Saving…" : "Save Settings"}
+          {saved ? "Saved!" : saving ? "Saving…" : "Save Settings"}
         </button>
       </div>
     </div>

@@ -1,8 +1,9 @@
 export interface Contact {
-  id: string;        // unique handle, e.g. "my-api-project"
-  name: string;      // display name (same as id for now)
-  mode: "hub" | "agent";
-  isOnline: boolean;
+  id: string;               // projectId UUID
+  name: string;             // project name from server
+  description: string | null;
+  ablyChannelName: string;  // "jaibber:project:{id}"
+  isOnline: boolean;        // from Ably presence on project channel
   lastSeen: string | null;
-  projectDir?: string;
+  role: "admin" | "member";
 }

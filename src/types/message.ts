@@ -1,17 +1,19 @@
 export interface Message {
   id: string;
-  conversationId: string;
+  conversationId: string;  // projectId UUID
   sender: "me" | "them";
+  senderName?: string;     // display name for group chat attribution
   text: string;
   timestamp: string;
   status: "sending" | "sent" | "streaming" | "done" | "error";
 }
 
 export interface AblyMessage {
-  from: string;
-  to: string;
+  from: string;           // sender userId UUID
+  fromUsername: string;   // display name shown in group chat
+  projectId: string;      // replaces "to" — channel routing is implicit
   text: string;
   messageId: string;
   type: "message" | "response" | "typing" | "done" | "error";
-  responseId?: string;  // sent in "typing" so hub can pre-create bubble with correct ID
+  responseId?: string;    // sent in "typing" so receivers can pre-create bubble with correct ID
 }

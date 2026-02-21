@@ -32,7 +32,7 @@ export function ContactCard({ contact, isActive, onClick }: Props) {
             isActive ? "bg-primary/30 text-primary" : "bg-muted text-muted-foreground"
           )}
         >
-          {contact.id.charAt(0).toUpperCase()}
+          {contact.name.charAt(0).toUpperCase()}
         </div>
         <span
           className={cn(

@@ -36,7 +36,7 @@ export function ChatWindow({ contactId }: Props) {
       <div className="flex items-center gap-3 px-5 py-3.5 border-b border-border bg-card/50">
         <div className="relative">
           <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-sm font-semibold text-primary">
-            {contactId.charAt(0).toUpperCase()}
+            {(contact?.name ?? contactId).charAt(0).toUpperCase()}
           </div>
           <span
             className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background ${
@@ -45,18 +45,11 @@ export function ChatWindow({ contactId }: Props) {
           />
         </div>
         <div>
-          <div className="font-semibold text-sm text-foreground">{contactId}</div>
+          <div className="font-semibold text-sm text-foreground">{contact?.name ?? contactId}</div>
           <div className="text-xs text-muted-foreground">
             {contact?.isOnline ? "online" : contact?.lastSeen ? `last seen ${new Date(contact.lastSeen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "offline"}
           </div>
         </div>
-        {contact?.mode === "agent" && (
-          <div className="ml-auto">
-            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">
-              agent
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Messages */}

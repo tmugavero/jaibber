@@ -18,28 +18,17 @@ impl AppState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
-    pub ably_api_key: Option<String>,
     pub anthropic_api_key: Option<String>,
-    pub my_handle: String,
-    pub my_mode: AgentMode,
-    pub project_dir: Option<String>,
+    pub machine_name: String,
+    pub api_base_url: String,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            ably_api_key: None,
             anthropic_api_key: None,
-            my_handle: String::new(),
-            my_mode: AgentMode::Hub,
-            project_dir: None,
+            machine_name: String::new(),
+            api_base_url: String::new(),
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum AgentMode {
-    Hub,
-    Agent,
 }
