@@ -95,7 +95,12 @@ function App() {
         }
 
         // ── 5. Load contacts (projects) from server ────────────────────────
-        await useContactStore.getState().loadFromServer(apiBaseUrl, authData.token);
+        // Wrap so a network hiccup here doesn't kill boot and show login
+        try {
+          await useContactStore.getState().loadFromServer(apiBaseUrl, authData.token);
+        } catch {
+          // Continue — contacts will be empty but user stays logged in
+        }
 
         // ── 6. Load persisted local projects (agent machine state) ─────────
         const localProjects = await store.get<ReturnType<typeof useProjectStore.getState>["projects"]>("local_projects");
