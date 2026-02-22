@@ -24,6 +24,7 @@ function App() {
   useEffect(() => {
     return useProjectStore.subscribe(async (state) => {
       const store = await Store.load("jaibber.json");
+      await store.set(SCHEMA_KEY, SCHEMA_VERSION);
       await store.set("local_projects", state.projects);
       await store.save();
     });
@@ -37,8 +38,13 @@ function App() {
         // Store imported statically at top of file
         const store = await Store.load("jaibber.json");
         const schemaVersion = await store.get<number>(SCHEMA_KEY);
-        if (!schemaVersion || schemaVersion < SCHEMA_VERSION) {
+        if (schemaVersion !== null && schemaVersion < SCHEMA_VERSION) {
+          // Explicitly old format — wipe stale data
           await store.clear();
+          await store.set(SCHEMA_KEY, SCHEMA_VERSION);
+          await store.save();
+        } else if (schemaVersion === null) {
+          // Key missing (can happen if Rust/JS saves raced) — set it without wiping
           await store.set(SCHEMA_KEY, SCHEMA_VERSION);
           await store.save();
         }
@@ -128,6 +134,7 @@ function App() {
 
     try {
       const store = await Store.load("jaibber.json");
+      await store.set(SCHEMA_KEY, SCHEMA_VERSION);
       await store.set("auth", { token: auth.token, userId: auth.userId, username: auth.username });
       await store.set("api_base_url", settings.apiBaseUrl);
       await store.save();
@@ -135,7 +142,11 @@ function App() {
 
       // Load contacts with the new token
       if (settings.apiBaseUrl) {
-        await useContactStore.getState().loadFromServer(settings.apiBaseUrl, auth.token);
+        try {
+          await useContactStore.getState().loadFromServer(settings.apiBaseUrl, auth.token);
+        } catch {
+          // Network hiccup — continue, contacts will be empty
+        }
       }
 
       const messages = await loadMessages();
