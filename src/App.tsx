@@ -61,16 +61,24 @@ function App() {
         let { apiBaseUrl } = settings;
 
         if (!apiBaseUrl) {
-          // Rust settings lost (can happen on webview reload) — try JS store fallback
-          const savedUrl = await store.get<string>("api_base_url");
-          if (savedUrl) {
-            apiBaseUrl = savedUrl;
-            const recovered = { ...settings, apiBaseUrl: savedUrl };
-            useSettingsStore.getState().setSettings(recovered);
-            await saveSettings(recovered);
+          // Rust settings lost — try full app_settings from JS store first (preserves
+          // machineName + anthropicApiKey), then fall back to just api_base_url
+          const savedSettings = await store.get<typeof settings>("app_settings");
+          if (savedSettings?.apiBaseUrl) {
+            apiBaseUrl = savedSettings.apiBaseUrl;
+            useSettingsStore.getState().setSettings(savedSettings);
+            await saveSettings(savedSettings);
           } else {
-            setBootState("login");
-            return;
+            const savedUrl = await store.get<string>("api_base_url");
+            if (savedUrl) {
+              apiBaseUrl = savedUrl;
+              const recovered = { ...settings, apiBaseUrl: savedUrl };
+              useSettingsStore.getState().setSettings(recovered);
+              await saveSettings(recovered);
+            } else {
+              setBootState("login");
+              return;
+            }
           }
         } else {
           useSettingsStore.getState().setSettings(settings);
