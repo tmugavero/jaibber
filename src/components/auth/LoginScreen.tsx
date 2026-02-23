@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { open } from "@tauri-apps/plugin-shell";
+import { openUrl, saveSettings } from "@/lib/platform";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { saveSettings } from "@/lib/tauri";
 import { cn } from "@/lib/cn";
 
 interface Props {
@@ -60,7 +59,7 @@ export function LoginScreen({ onLogin }: Props) {
 
   const handleGithubOpen = async () => {
     try {
-      await open(`${apiBaseUrl}/api/auth/github/start`);
+      await openUrl(`${apiBaseUrl}/api/auth/github/start`);
     } catch (e) {
       setError(`Could not open browser: ${e}`);
     }

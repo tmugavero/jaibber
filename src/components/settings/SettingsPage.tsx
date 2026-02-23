@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { Store } from "@tauri-apps/plugin-store";
+import { storage, saveSettings } from "@/lib/platform";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
-import { saveSettings } from "@/lib/tauri";
 import type { AppSettings } from "@/types/settings";
 
 export function SettingsPage() {
@@ -15,12 +14,9 @@ export function SettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Save to Rust (for run_claude to pick up anthropicApiKey) and to JS store as fallback
+      // Save to Rust (Tauri) or localStorage (web), plus JS store as fallback
       await saveSettings(form);
-      const store = await Store.load("jaibber.json");
-      await store.set("schema_version", 2);
-      await store.set("app_settings", form);
-      await store.save();
+      await storage.set("schema_version", 2);
       useSettingsStore.getState().setSettings(form);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);

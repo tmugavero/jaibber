@@ -6,7 +6,7 @@ import { useChatStore } from "@/stores/chatStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useProjectStore } from "@/stores/projectStore";
-import { runClaude } from "@/lib/tauri";
+import { runClaude, isTauri } from "@/lib/platform";
 import type { AblyMessage } from "@/types/message";
 import type { Contact } from "@/types/contact";
 import type * as Ably from "ably";
@@ -80,7 +80,8 @@ function subscribeToProjectChannel(
       });
 
       // If this machine has the project registered locally → act as responder.
-      {
+      // Only Tauri desktop instances can run Claude — web clients are chat-only.
+      if (isTauri) {
         const localProject = useProjectStore.getState().projects.find(
           (p) => p.projectId === contact.id
         );
@@ -134,7 +135,7 @@ function subscribeToProjectChannel(
             } satisfies AblyMessage);
           }
         }
-      }
+      } // end isTauri agent check
     } else if (payload.type === "typing") {
       if (isMine) return;
       const bubbleId = payload.responseId ?? `typing-${payload.from}-${Date.now()}`;

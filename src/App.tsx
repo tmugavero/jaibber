@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import "./App.css";
-import { Store } from "@tauri-apps/plugin-store";
-import { getSettings, saveSettings } from "@/lib/tauri";
+import { storage, getSettings, saveSettings } from "@/lib/platform";
 import { loadMessages } from "@/lib/chatPersistence";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useContactStore } from "@/stores/contactStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useChatStore } from "@/stores/chatStore";
+import { useOrgStore } from "@/stores/orgStore";
 import { AppShell } from "@/components/layout/AppShell";
 import { LoginScreen } from "@/components/auth/LoginScreen";
 
@@ -23,10 +23,8 @@ function App() {
   // Auto-save local projects to disk whenever the list changes
   useEffect(() => {
     return useProjectStore.subscribe(async (state) => {
-      const store = await Store.load("jaibber.json");
-      await store.set(SCHEMA_KEY, SCHEMA_VERSION);
-      await store.set("local_projects", state.projects);
-      await store.save();
+      await storage.set(SCHEMA_KEY, SCHEMA_VERSION);
+      await storage.set("local_projects", state.projects);
     });
   }, []);
 
@@ -34,42 +32,33 @@ function App() {
     (async () => {
       try {
         // ── 1. Schema version wipe ─────────────────────────────────────────
-        // Old versions stored different keys; wipe on first run of v2+
-        // Store imported statically at top of file
-        const store = await Store.load("jaibber.json");
-        const schemaVersion = await store.get<number>(SCHEMA_KEY);
+        const schemaVersion = await storage.get<number>(SCHEMA_KEY);
         if (schemaVersion != null && schemaVersion < SCHEMA_VERSION) {
-          // Explicitly old format — wipe stale data
-          await store.clear();
-          await store.set(SCHEMA_KEY, SCHEMA_VERSION);
-          await store.save();
+          await storage.clear();
+          await storage.set(SCHEMA_KEY, SCHEMA_VERSION);
         } else if (schemaVersion === null) {
-          // Key missing (can happen if Rust/JS saves raced) — set it without wiping
-          await store.set(SCHEMA_KEY, SCHEMA_VERSION);
-          await store.save();
+          await storage.set(SCHEMA_KEY, SCHEMA_VERSION);
         }
 
         // ── 2. Load persisted auth ─────────────────────────────────────────
-        const authData = await store.get<{ token: string; userId: string; username: string }>("auth");
+        const authData = await storage.get<{ token: string; userId: string; username: string }>("auth");
         if (!authData?.token) {
           setBootState("login");
           return;
         }
 
-        // ── 3. Load settings from Rust; fall back to JS store if apiBaseUrl missing
+        // ── 3. Load settings from Rust (Tauri) or localStorage (web)
         const settings = await getSettings();
         let { apiBaseUrl } = settings;
 
         if (!apiBaseUrl) {
-          // Rust settings lost — try full app_settings from JS store first (preserves
-          // machineName + anthropicApiKey), then fall back to just api_base_url
-          const savedSettings = await store.get<typeof settings>("app_settings");
+          const savedSettings = await storage.get<typeof settings>("app_settings");
           if (savedSettings?.apiBaseUrl) {
             apiBaseUrl = savedSettings.apiBaseUrl;
             useSettingsStore.getState().setSettings(savedSettings);
             await saveSettings(savedSettings);
           } else {
-            const savedUrl = await store.get<string>("api_base_url");
+            const savedUrl = await storage.get<string>("api_base_url");
             if (savedUrl) {
               apiBaseUrl = savedUrl;
               const recovered = { ...settings, apiBaseUrl: savedUrl };
@@ -85,14 +74,12 @@ function App() {
         }
 
         // ── 4. Validate token against server ──────────────────────────────
-        // Only force logout on a definitive 401 — network errors keep the user logged in
         try {
           const meRes = await fetch(`${apiBaseUrl}/api/auth/me`, {
             headers: { Authorization: `Bearer ${authData.token}` },
           });
           if (meRes.status === 401 || meRes.status === 403) {
-            await store.delete("auth");
-            await store.save();
+            await storage.delete("auth");
             setBootState("login");
             return;
           }
@@ -100,24 +87,26 @@ function App() {
             const meData = await meRes.json();
             useAuthStore.getState().setAuth(authData.token, meData.userId, meData.username);
           } else {
-            // Server error — continue with cached identity
             useAuthStore.getState().setAuth(authData.token, authData.userId, authData.username);
           }
         } catch {
-          // Network unreachable — continue with cached identity (offline mode)
           useAuthStore.getState().setAuth(authData.token, authData.userId, authData.username);
         }
 
-        // ── 5. Load contacts (projects) from server ────────────────────────
-        // Wrap so a network hiccup here doesn't kill boot and show login
+        // ── 5. Load contacts (projects) and orgs from server ──────────────
         try {
           await useContactStore.getState().loadFromServer(apiBaseUrl, authData.token);
         } catch {
           // Continue — contacts will be empty but user stays logged in
         }
+        try {
+          await useOrgStore.getState().loadOrgs(apiBaseUrl, authData.token);
+        } catch {
+          // Continue — orgs will be empty
+        }
 
         // ── 6. Load persisted local projects (agent machine state) ─────────
-        const localProjects = await store.get<ReturnType<typeof useProjectStore.getState>["projects"]>("local_projects");
+        const localProjects = await storage.get<ReturnType<typeof useProjectStore.getState>["projects"]>("local_projects");
         if (localProjects) {
           useProjectStore.getState().setProjects(localProjects);
         }
@@ -135,20 +124,16 @@ function App() {
   }, []);
 
   const handleLogin = async () => {
-    // After login, persist auth to store and continue boot
     const auth = useAuthStore.getState();
     const settings = useSettingsStore.getState().settings;
     if (!auth.token || !auth.userId || !auth.username) return;
 
     try {
-      const store = await Store.load("jaibber.json");
-      await store.set(SCHEMA_KEY, SCHEMA_VERSION);
-      await store.set("auth", { token: auth.token, userId: auth.userId, username: auth.username });
-      await store.set("api_base_url", settings.apiBaseUrl);
-      await store.save();
+      await storage.set(SCHEMA_KEY, SCHEMA_VERSION);
+      await storage.set("auth", { token: auth.token, userId: auth.userId, username: auth.username });
+      await storage.set("api_base_url", settings.apiBaseUrl);
       await saveSettings(settings);
 
-      // Load contacts with the new token
       if (settings.apiBaseUrl) {
         try {
           await useContactStore.getState().loadFromServer(settings.apiBaseUrl, auth.token);

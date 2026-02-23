@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Store } from "@tauri-apps/plugin-store";
+import { storage } from "@/lib/platform";
 import { useProjectStore } from "@/stores/projectStore";
 import { useContactStore } from "@/stores/contactStore";
 import { useAuthStore } from "@/stores/authStore";
@@ -7,9 +7,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import type { LocalProject } from "@/stores/projectStore";
 
 async function saveProjects(projects: LocalProject[]) {
-  const store = await Store.load("jaibber.json");
-  await store.set("local_projects", projects);
-  await store.save();
+  await storage.set("local_projects", projects);
 }
 
 export function ProjectsPanel() {
