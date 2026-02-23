@@ -1,7 +1,11 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { MarketingNav, MarketingFooter } from "./MarketingNav";
-import { PLANS } from "@/lib/plans";
+import { FALLBACK_PLANS, fetchPlans } from "@/lib/plans";
+import type { Plan } from "@/lib/plans";
 import { cn } from "@/lib/cn";
+
+const DEFAULT_API = "https://jaibber-server.vercel.app";
 
 const STEPS = [
   {
@@ -55,6 +59,12 @@ const FEATURES = [
 ];
 
 export function LandingPage() {
+  const [plans, setPlans] = useState<Plan[]>(FALLBACK_PLANS);
+
+  useEffect(() => {
+    fetchPlans(DEFAULT_API).then(setPlans).catch(() => {});
+  }, []);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <MarketingNav />
@@ -136,7 +146,7 @@ export function LandingPage() {
             Start free with up to 3 projects. Upgrade when your team grows.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-            {PLANS.map((plan) => (
+            {plans.map((plan) => (
               <div
                 key={plan.id}
                 className={cn(

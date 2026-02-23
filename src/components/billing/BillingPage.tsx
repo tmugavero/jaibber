@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useOrgStore } from "@/stores/orgStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
 import { CreateOrgInline } from "@/components/org/CreateOrgInline";
-import { PLANS } from "@/lib/plans";
+import { FALLBACK_PLANS, fetchPlans } from "@/lib/plans";
+import type { Plan } from "@/lib/plans";
 import { cn } from "@/lib/cn";
 
 export function BillingPage() {
@@ -12,20 +13,30 @@ export function BillingPage() {
   const token = useAuthStore((s) => s.token);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [plans, setPlans] = useState<Plan[]>(FALLBACK_PLANS);
+  const [seatCounts, setSeatCounts] = useState<Record<string, number>>({});
 
-  const handleUpgrade = async (plan: string) => {
+  // Fetch live plans from Stripe
+  useEffect(() => {
+    if (!apiBaseUrl) return;
+    fetchPlans(apiBaseUrl)
+      .then(setPlans)
+      .catch(() => {}); // Keep fallback on error
+  }, [apiBaseUrl]);
+
+  const handleUpgrade = async (plan: Plan) => {
     if (!activeOrg || !apiBaseUrl || !token) return;
-    setLoading(plan);
+    setLoading(plan.id);
     setError(null);
     try {
+      const quantity = plan.perSeat ? Math.max(1, seatCounts[plan.id] || 1) : 1;
       const res = await fetch(`${apiBaseUrl}/api/billing/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ orgId: activeOrg.id, plan }),
+        body: JSON.stringify({ orgId: activeOrg.id, plan: plan.id, quantity }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error); return; }
-      // Redirect to Stripe Checkout
       window.open(data.url, "_blank");
     } catch (e) {
       setError(`Network error: ${e}`);
@@ -89,8 +100,9 @@ export function BillingPage() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {PLANS.map((plan) => {
+        {plans.map((plan) => {
           const isCurrent = plan.id === currentPlan;
+          const seats = seatCounts[plan.id] || 1;
           return (
             <div
               key={plan.id}
@@ -115,6 +127,27 @@ export function BillingPage() {
                   </li>
                 ))}
               </ul>
+
+              {/* Seat picker for per-seat plans */}
+              {plan.perSeat && !isCurrent && plan.id !== "free" && (
+                <div className="flex items-center gap-2 mb-3">
+                  <label className="text-xs text-muted-foreground">Seats:</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={1000}
+                    value={seats}
+                    onChange={(e) => setSeatCounts({ ...seatCounts, [plan.id]: Math.max(1, Number(e.target.value) || 1) })}
+                    className="w-16 bg-muted/40 border border-input rounded-lg px-2 py-1 text-sm text-foreground text-center focus:outline-none focus:ring-1 focus:ring-primary/50"
+                  />
+                  {plan.priceAmount != null && (
+                    <span className="text-xs text-muted-foreground">
+                      = ${((plan.priceAmount / 100) * seats).toFixed(0)}/mo
+                    </span>
+                  )}
+                </div>
+              )}
+
               {isCurrent ? (
                 <div className="text-xs text-center text-muted-foreground border border-border rounded-xl py-2.5 font-medium">
                   Current Plan
@@ -123,7 +156,7 @@ export function BillingPage() {
                 <div className="text-xs text-center text-muted-foreground py-2.5" />
               ) : (
                 <button
-                  onClick={() => handleUpgrade(plan.id)}
+                  onClick={() => handleUpgrade(plan)}
                   disabled={loading === plan.id}
                   className={cn(
                     "w-full rounded-xl py-2.5 text-sm font-semibold transition-all disabled:opacity-50",
