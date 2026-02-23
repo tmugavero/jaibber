@@ -1,7 +1,20 @@
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { storage } from "@/lib/platform";
+
+function useIsLoggedIn() {
+  const [loggedIn, setLoggedIn] = useState(false);
+  useEffect(() => {
+    storage.get<{ token: string }>("auth").then((auth) => {
+      if (auth?.token) setLoggedIn(true);
+    });
+  }, []);
+  return loggedIn;
+}
 
 export function MarketingNav() {
   const location = useLocation();
+  const loggedIn = useIsLoggedIn();
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
@@ -31,18 +44,29 @@ export function MarketingNav() {
         </div>
 
         <div className="flex items-center gap-3">
-          <Link
-            to="/login"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Sign in
-          </Link>
-          <Link
-            to="/login"
-            className="bg-primary text-primary-foreground rounded-lg px-4 py-2 text-sm font-semibold hover:bg-primary/90 transition-all"
-          >
-            Get Started
-          </Link>
+          {loggedIn ? (
+            <Link
+              to="/app"
+              className="bg-primary text-primary-foreground rounded-lg px-4 py-2 text-sm font-semibold hover:bg-primary/90 transition-all"
+            >
+              Open App
+            </Link>
+          ) : (
+            <>
+              <Link
+                to="/login"
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Sign in
+              </Link>
+              <Link
+                to="/login"
+                className="bg-primary text-primary-foreground rounded-lg px-4 py-2 text-sm font-semibold hover:bg-primary/90 transition-all"
+              >
+                Get Started
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </nav>
@@ -50,6 +74,8 @@ export function MarketingNav() {
 }
 
 export function MarketingFooter() {
+  const loggedIn = useIsLoggedIn();
+
   return (
     <footer className="border-t border-border bg-background">
       <div className="max-w-6xl mx-auto px-6 py-12">
@@ -60,7 +86,9 @@ export function MarketingFooter() {
           </div>
           <div className="flex items-center gap-6 text-sm text-muted-foreground">
             <Link to="/pricing" className="hover:text-foreground transition-colors">Pricing</Link>
-            <Link to="/login" className="hover:text-foreground transition-colors">Sign in</Link>
+            <Link to={loggedIn ? "/app" : "/login"} className="hover:text-foreground transition-colors">
+              {loggedIn ? "Open App" : "Sign in"}
+            </Link>
           </div>
           <div className="text-xs text-muted-foreground">
             &copy; {new Date().getFullYear()} Jaibber. All rights reserved.

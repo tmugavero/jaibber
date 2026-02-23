@@ -1,6 +1,7 @@
 import { useContactStore } from "@/stores/contactStore";
 import { useAuthStore } from "@/stores/authStore";
 import { ContactCard } from "./ContactCard";
+import { isTauri } from "@/lib/platform";
 
 interface Props {
   activeId: string | null;
@@ -86,7 +87,11 @@ export function ContactList({ activeId, onSelect, onOpenSettings, onOpenProjects
           <div className="px-2 py-8 text-center text-xs text-muted-foreground leading-relaxed">
             <div className="text-2xl mb-2">📁</div>
             <div>No projects yet</div>
-            <div className="mt-1 opacity-60">Click the folder icon to create your first project</div>
+            <div className="mt-1 opacity-60">
+              {isTauri
+                ? "Click the folder icon to create your first project"
+                : "Click the folder icon to create a project, or ask a team admin to invite you"}
+            </div>
           </div>
         ) : (
           <>

@@ -80,7 +80,7 @@ export function PricingPage() {
                     : "border border-primary text-primary hover:bg-primary/10"
                 )}
               >
-                {plan.id === "free" ? "Get Started Free" : `Start with ${plan.name}`}
+                {plan.id === "free" ? "Get Started Free" : "Get Started"}
               </Link>
             </div>
           ))}
