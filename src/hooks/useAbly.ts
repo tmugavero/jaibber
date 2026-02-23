@@ -23,15 +23,24 @@ function subscribeToProjectChannel(
 ): () => void {
   const channel = ably.channels.get(contact.ablyChannelName);
 
-  channel.presence.enter({ userId, username });
+  // Include whether this connection is an agent (has this project registered locally).
+  // Only agent connections count as "online" — web/viewer connections don't.
+  const localProject = useProjectStore.getState().projects.find(
+    (p) => p.projectId === contact.id
+  );
+  channel.presence.enter({ userId, username, isAgent: !!localProject });
 
   // Use connectionId (unique per connection) instead of clientId so that the
   // same Jaibber account on two machines counts as two distinct presence members.
   const isOwnConnection = (member: { connectionId?: string }) =>
     member.connectionId != null && member.connectionId === ably.connection.id;
 
+  const isAgentMember = (member: { data?: { isAgent?: boolean } }) =>
+    member.data?.isAgent === true;
+
   channel.presence.subscribe("enter", (member) => {
     if (isOwnConnection(member)) return;
+    if (!isAgentMember(member)) return;
     useContactStore.getState().setOnline(contact.id, true);
   });
 
@@ -39,13 +48,14 @@ function subscribeToProjectChannel(
   // user, different machine). Treat it the same as "enter".
   channel.presence.subscribe("update", (member) => {
     if (isOwnConnection(member)) return;
+    if (!isAgentMember(member)) return;
     useContactStore.getState().setOnline(contact.id, true);
   });
 
   channel.presence.subscribe("leave", () => {
     channel.presence.get().then((members) => {
-      const others = members.filter((m) => !isOwnConnection(m));
-      if (others.length === 0) {
+      const agents = members.filter((m) => !isOwnConnection(m) && isAgentMember(m));
+      if (agents.length === 0) {
         useContactStore.getState().setOnline(contact.id, false);
       }
     }).catch(() => {});
@@ -53,8 +63,8 @@ function subscribeToProjectChannel(
 
   // Hydrate initial online state
   channel.presence.get().then((members) => {
-    const others = members.filter((m) => !isOwnConnection(m));
-    if (others.length > 0) {
+    const agents = members.filter((m) => !isOwnConnection(m) && isAgentMember(m));
+    if (agents.length > 0) {
       useContactStore.getState().setOnline(contact.id, true);
     }
   }).catch(() => {});
