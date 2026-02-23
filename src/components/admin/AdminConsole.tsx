@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useOrgStore } from "@/stores/orgStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
+import { CreateOrgInline } from "@/components/org/CreateOrgInline";
 import type { OrgAgent } from "@/types/org";
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
@@ -61,11 +62,7 @@ export function AdminConsole() {
   }, [activeOrgId, apiBaseUrl, token, range]);
 
   if (!activeOrgId) {
-    return (
-      <div className="p-6 text-center text-muted-foreground">
-        <p className="text-sm">Create or join an organization to see the admin console.</p>
-      </div>
-    );
+    return <CreateOrgInline message="Create an organization to access the admin console." />;
   }
 
   return (

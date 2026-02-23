@@ -2,32 +2,9 @@ import { useState } from "react";
 import { useOrgStore } from "@/stores/orgStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
+import { CreateOrgInline } from "@/components/org/CreateOrgInline";
+import { PLANS } from "@/lib/plans";
 import { cn } from "@/lib/cn";
-
-const PLANS = [
-  {
-    id: "free",
-    name: "Free",
-    price: "$0",
-    period: "forever",
-    features: ["3 projects", "2 agent connections", "3 members", "7-day message history"],
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: "$19",
-    period: "/month",
-    features: ["15 projects", "10 agent connections", "10 members", "90-day history", "Admin console"],
-    recommended: true,
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    price: "$49",
-    period: "/mo + $10/seat",
-    features: ["Unlimited projects", "Unlimited agents", "Unlimited members", "Unlimited history", "Audit logs", "SSO (coming soon)", "API access"],
-  },
-];
 
 export function BillingPage() {
   const activeOrg = useOrgStore((s) => s.orgs.find((o) => o.id === s.activeOrgId));
@@ -78,11 +55,7 @@ export function BillingPage() {
   };
 
   if (!activeOrg) {
-    return (
-      <div className="p-6 text-center text-muted-foreground">
-        <p className="text-sm">Create or join an organization to manage billing.</p>
-      </div>
-    );
+    return <CreateOrgInline message="Create an organization to manage billing." />;
   }
 
   const currentPlan = activeOrg.plan || "free";

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import "./App.css";
-import { storage, getSettings, saveSettings } from "@/lib/platform";
+import { storage, getSettings, saveSettings, isTauri } from "@/lib/platform";
 import { loadMessages } from "@/lib/chatPersistence";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
@@ -17,7 +17,12 @@ const SCHEMA_KEY = "schema_version";
 
 type BootState = "loading" | "login" | "app";
 
-function App() {
+interface AppProps {
+  /** Web router calls this when App needs to redirect to login */
+  onRequireLogin?: () => void;
+}
+
+function App({ onRequireLogin }: AppProps = {}) {
   const [bootState, setBootState] = useState<BootState>("loading");
 
   // Auto-save local projects to disk whenever the list changes
@@ -160,6 +165,15 @@ function App() {
   }
 
   if (bootState === "login") {
+    // When running inside web router, redirect to login page instead of rendering inline
+    if (!isTauri && onRequireLogin) {
+      onRequireLogin();
+      return (
+        <div className="flex items-center justify-center h-screen bg-background">
+          <div className="text-muted-foreground text-sm animate-pulse">Redirecting…</div>
+        </div>
+      );
+    }
     return <LoginScreen onLogin={handleLogin} />;
   }
 

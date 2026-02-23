@@ -28,6 +28,10 @@ export function AppShell() {
   const [showSidebar, setShowSidebar] = useState(true);
   const isMobile = useIsMobile();
 
+  // Check org role for admin/billing visibility
+  const activeOrg = useOrgStore((s) => s.orgs.find((o) => o.id === s.activeOrgId));
+  const canAccessAdmin = activeOrg?.role === "owner" || activeOrg?.role === "admin";
+
   // Initialize Ably connection + presence + project channel listeners
   useAbly();
 
@@ -134,8 +138,8 @@ export function AppShell() {
             onSelect={handleSelectContact}
             onOpenSettings={() => handleOpenPanel("settings")}
             onOpenProjects={() => handleOpenPanel("projects")}
-            onOpenAdmin={() => handleOpenPanel("admin")}
-            onOpenBilling={() => handleOpenPanel("billing")}
+            onOpenAdmin={canAccessAdmin ? () => handleOpenPanel("admin") : undefined}
+            onOpenBilling={canAccessAdmin ? () => handleOpenPanel("billing") : undefined}
           />
         ) : (
           <div className="flex-1 flex flex-col overflow-hidden">
@@ -155,8 +159,8 @@ export function AppShell() {
           onSelect={handleSelectContact}
           onOpenSettings={() => setRightPanel("settings")}
           onOpenProjects={() => setRightPanel("projects")}
-          onOpenAdmin={() => setRightPanel("admin")}
-          onOpenBilling={() => setRightPanel("billing")}
+          onOpenAdmin={canAccessAdmin ? () => setRightPanel("admin") : undefined}
+          onOpenBilling={canAccessAdmin ? () => setRightPanel("billing") : undefined}
         />
       </div>
       <div className="flex-1 flex flex-col overflow-hidden">
