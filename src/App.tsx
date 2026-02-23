@@ -38,7 +38,7 @@ function App() {
         // Store imported statically at top of file
         const store = await Store.load("jaibber.json");
         const schemaVersion = await store.get<number>(SCHEMA_KEY);
-        if (schemaVersion !== null && schemaVersion < SCHEMA_VERSION) {
+        if (schemaVersion != null && schemaVersion < SCHEMA_VERSION) {
           // Explicitly old format — wipe stale data
           await store.clear();
           await store.set(SCHEMA_KEY, SCHEMA_VERSION);

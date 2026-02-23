@@ -9,176 +9,180 @@ import { useProjectStore } from "@/stores/projectStore";
 import { runClaude } from "@/lib/tauri";
 import type { AblyMessage } from "@/types/message";
 import type { Contact } from "@/types/contact";
+import type * as Ably from "ably";
 
-function connectAbly(
-  apiBaseUrl: string,
+/**
+ * Subscribe to one project channel: presence tracking + message handling.
+ * Returns a cleanup function.
+ */
+function subscribeToProjectChannel(
+  ably: Ably.Realtime,
+  contact: Contact,
   userId: string,
-  username: string,
-  contacts: Record<string, Contact>,
-  getToken: () => string | null
-) {
-  const ably = initAbly(apiBaseUrl, userId, getToken);
+  username: string
+): () => void {
+  const channel = ably.channels.get(contact.ablyChannelName);
 
-  // ── Global presence channel ───────────────────────────────────────────────
-  const presenceChannel = ably.channels.get("jaibber:presence");
-  const localProjects = useProjectStore.getState().projects;
-  presenceChannel.presence.enter({
-    userId,
-    username,
-    projectIds: localProjects.map((p) => p.projectId),
+  channel.presence.enter({ userId, username });
+
+  // Use connectionId (unique per connection) instead of clientId so that the
+  // same Jaibber account on two machines counts as two distinct presence members.
+  const isOwnConnection = (member: { connectionId?: string }) =>
+    member.connectionId != null && member.connectionId === ably.connection.id;
+
+  channel.presence.subscribe("enter", (member) => {
+    if (isOwnConnection(member)) return;
+    useContactStore.getState().setOnline(contact.id, true);
   });
 
-  // ── Per-project channels ──────────────────────────────────────────────────
-  const projectChannels = Object.values(contacts).map((contact) => {
-    const channel = ably.channels.get(contact.ablyChannelName);
+  // "update" fires when the same clientId re-enters from another connection (same
+  // user, different machine). Treat it the same as "enter".
+  channel.presence.subscribe("update", (member) => {
+    if (isOwnConnection(member)) return;
+    useContactStore.getState().setOnline(contact.id, true);
+  });
 
-    // Enter presence on this project channel
-    channel.presence.enter({ userId, username });
-
-    // Track per-project online status via presence
-    channel.presence.subscribe("enter", (member) => {
-      if (member.clientId === userId) return;
-      useContactStore.getState().setOnline(contact.id, true);
-    });
-    channel.presence.subscribe("leave", () => {
-      channel.presence.get().then((members) => {
-        const others = members.filter((m) => m.clientId !== userId);
-        if (others.length === 0) {
-          useContactStore.getState().setOnline(contact.id, false);
-        }
-      }).catch(() => {});
-    });
-
-    // Hydrate initial presence state
+  channel.presence.subscribe("leave", () => {
     channel.presence.get().then((members) => {
-      const others = members.filter((m) => m.clientId !== userId);
-      if (others.length > 0) {
-        useContactStore.getState().setOnline(contact.id, true);
+      const others = members.filter((m) => !isOwnConnection(m));
+      if (others.length === 0) {
+        useContactStore.getState().setOnline(contact.id, false);
       }
     }).catch(() => {});
+  });
 
-    // Subscribe to messages on this project channel
-    channel.subscribe(async (msg) => {
-      const payload = msg.data as AblyMessage;
-      if (!payload || payload.projectId !== contact.id) return;
+  // Hydrate initial online state
+  channel.presence.get().then((members) => {
+    const others = members.filter((m) => !isOwnConnection(m));
+    if (others.length > 0) {
+      useContactStore.getState().setOnline(contact.id, true);
+    }
+  }).catch(() => {});
 
-      const convId = contact.id;
-      const isMine = payload.from === userId;
+  // Subscribe to messages on this project channel
+  channel.subscribe(async (msg) => {
+    const payload = msg.data as AblyMessage;
+    if (!payload || payload.projectId !== contact.id) return;
 
-      if (payload.type === "message") {
-        // All members see all messages (group chat)
-        useChatStore.getState().addMessage({
-          id: payload.messageId,
-          conversationId: convId,
-          sender: isMine ? "me" : "them",
-          senderName: payload.fromUsername,
-          text: payload.text,
-          timestamp: new Date().toISOString(),
-          status: "done",
-        });
+    const convId = contact.id;
+    const isMine = payload.from === userId;
 
-        // If this machine has the project registered locally → act as responder.
-        // No isMine check: on a single-machine setup the user and agent share the same account.
-        // chatStore already deduplicates sent messages by id so no doubles occur.
-        {
-          const localProject = useProjectStore.getState().projects.find(
-            (p) => p.projectId === contact.id
-          );
-          if (localProject) {
-            const responseId = uuidv4();
+    if (payload.type === "message") {
+      // All members see all messages (group chat)
+      useChatStore.getState().addMessage({
+        id: payload.messageId,
+        conversationId: convId,
+        sender: isMine ? "me" : "them",
+        senderName: payload.fromUsername,
+        text: payload.text,
+        timestamp: new Date().toISOString(),
+        status: "done",
+      });
 
-            // Add local streaming bubble
-            useChatStore.getState().addMessage({
-              id: responseId,
-              conversationId: convId,
-              sender: "them",
-              senderName: "Claude",
-              text: "",
-              timestamp: new Date().toISOString(),
-              status: "streaming",
-            });
+      // If this machine has the project registered locally → act as responder.
+      {
+        const localProject = useProjectStore.getState().projects.find(
+          (p) => p.projectId === contact.id
+        );
+        if (localProject) {
+          const responseId = uuidv4();
 
-            // Notify all members we're processing
+          useChatStore.getState().addMessage({
+            id: responseId,
+            conversationId: convId,
+            sender: "them",
+            senderName: "Claude",
+            text: "",
+            timestamp: new Date().toISOString(),
+            status: "streaming",
+          });
+
+          channel.publish("message", {
+            from: userId,
+            fromUsername: "Claude",
+            projectId: contact.id,
+            text: "",
+            messageId: uuidv4(),
+            responseId,
+            type: "typing",
+          } satisfies AblyMessage);
+
+          try {
+            const result = await runClaude(payload.text, localProject.projectDir);
+            useChatStore.getState().appendChunk(convId, responseId, result);
+            useChatStore.getState().markDone(convId, responseId);
+
             channel.publish("message", {
               from: userId,
               fromUsername: "Claude",
               projectId: contact.id,
-              text: "",
-              messageId: uuidv4(),
-              responseId,
-              type: "typing",
+              text: result,
+              messageId: responseId,
+              type: "response",
             } satisfies AblyMessage);
-
-            try {
-              const result = await runClaude(payload.text, localProject.projectDir);
-              useChatStore.getState().appendChunk(convId, responseId, result);
-              useChatStore.getState().markDone(convId, responseId);
-
-              channel.publish("message", {
-                from: userId,
-                fromUsername: "Claude",
-                projectId: contact.id,
-                text: result,
-                messageId: responseId,
-                type: "response",
-              } satisfies AblyMessage);
-            } catch (err) {
-              const errText = `⚠️ Agent error: ${err}`;
-              useChatStore.getState().appendChunk(convId, responseId, errText);
-              useChatStore.getState().updateStatus(convId, responseId, "error");
-              channel.publish("message", {
-                from: userId,
-                fromUsername: "Claude",
-                projectId: contact.id,
-                text: errText,
-                messageId: responseId,
-                type: "error",
-              } satisfies AblyMessage);
-            }
+          } catch (err) {
+            const errText = `⚠️ Agent error: ${err}`;
+            useChatStore.getState().appendChunk(convId, responseId, errText);
+            useChatStore.getState().updateStatus(convId, responseId, "error");
+            channel.publish("message", {
+              from: userId,
+              fromUsername: "Claude",
+              projectId: contact.id,
+              text: errText,
+              messageId: responseId,
+              type: "error",
+            } satisfies AblyMessage);
           }
         }
-      } else if (payload.type === "typing") {
-        if (isMine) return;
-        const bubbleId = payload.responseId ?? `typing-${payload.from}-${Date.now()}`;
-        useChatStore.getState().addMessage({
-          id: bubbleId,
-          conversationId: convId,
-          sender: "them",
-          senderName: payload.fromUsername,
-          text: "",
-          timestamp: new Date().toISOString(),
-          status: "streaming",
-        });
-      } else if (payload.type === "response" || payload.type === "done" || payload.type === "error") {
-        if (isMine) return;
-        const isError = payload.type === "error";
-        useChatStore.getState().replaceMessage(
-          convId,
-          payload.messageId,
-          payload.text,
-          isError ? "error" : "done"
-        );
       }
-    });
-
-    return channel;
+    } else if (payload.type === "typing") {
+      if (isMine) return;
+      const bubbleId = payload.responseId ?? `typing-${payload.from}-${Date.now()}`;
+      useChatStore.getState().addMessage({
+        id: bubbleId,
+        conversationId: convId,
+        sender: "them",
+        senderName: payload.fromUsername,
+        text: "",
+        timestamp: new Date().toISOString(),
+        status: "streaming",
+      });
+    } else if (payload.type === "response" || payload.type === "done" || payload.type === "error") {
+      if (isMine) return;
+      const isError = payload.type === "error";
+      useChatStore.getState().replaceMessage(
+        convId,
+        payload.messageId,
+        payload.text,
+        isError ? "error" : "done"
+      );
+    }
   });
 
   return () => {
-    presenceChannel.presence.leave();
-    presenceChannel.unsubscribe();
-    projectChannels.forEach((ch) => {
-      ch.presence.leave();
-      ch.unsubscribe();
-    });
+    channel.presence.leave();
+    channel.unsubscribe();
   };
 }
 
 export function useAbly() {
   const initializedRef = useRef(false);
+  const ablyRef = useRef<Ably.Realtime | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
+  // Track which channels we've already subscribed to (by channel name)
+  const channelCleanupsRef = useRef(new Map<string, () => void>());
 
   useEffect(() => {
+    const ensureChannelSubscribed = (contact: Contact) => {
+      if (channelCleanupsRef.current.has(contact.ablyChannelName)) return;
+      const ably = ablyRef.current;
+      if (!ably) return;
+      const { userId, username } = useAuthStore.getState();
+      if (!userId || !username) return;
+      const cleanup = subscribeToProjectChannel(ably, contact, userId, username);
+      channelCleanupsRef.current.set(contact.ablyChannelName, cleanup);
+    };
+
     const tryInit = () => {
       if (initializedRef.current) return;
       const { userId, username, token } = useAuthStore.getState();
@@ -188,14 +192,42 @@ export function useAbly() {
       if (!userId || !username || !token || !apiBaseUrl) return;
       if (Object.keys(contacts).length === 0) return;
 
+      const ably = initAbly(apiBaseUrl, userId, () => useAuthStore.getState().token);
+      ablyRef.current = ably;
       initializedRef.current = true;
-      cleanupRef.current = connectAbly(
-        apiBaseUrl,
+
+      // Enter global presence channel
+      const localProjects = useProjectStore.getState().projects;
+      const presenceChannel = ably.channels.get("jaibber:presence");
+      presenceChannel.presence.enter({
         userId,
         username,
-        contacts,
-        () => useAuthStore.getState().token
-      );
+        projectIds: localProjects.map((p) => p.projectId),
+      });
+
+      // Subscribe to all current project channels
+      for (const contact of Object.values(contacts)) {
+        ensureChannelSubscribed(contact);
+      }
+
+      cleanupRef.current = () => {
+        presenceChannel.presence.leave();
+        presenceChannel.unsubscribe();
+        channelCleanupsRef.current.forEach((cleanup) => cleanup());
+        channelCleanupsRef.current.clear();
+      };
+    };
+
+    // When contacts change after init, subscribe to any new project channels
+    const handleContactsChange = () => {
+      if (!initializedRef.current) {
+        tryInit();
+        return;
+      }
+      const contacts = useContactStore.getState().contacts;
+      for (const contact of Object.values(contacts)) {
+        ensureChannelSubscribed(contact);
+      }
     };
 
     tryInit();
@@ -203,15 +235,14 @@ export function useAbly() {
     const unsubAuth = useAuthStore.subscribe(() => {
       if (!initializedRef.current) tryInit();
     });
-    const unsubContacts = useContactStore.subscribe(() => {
-      if (!initializedRef.current) tryInit();
-    });
+    const unsubContacts = useContactStore.subscribe(handleContactsChange);
 
     return () => {
       unsubAuth();
       unsubContacts();
       cleanupRef.current?.();
       initializedRef.current = false;
+      ablyRef.current = null;
       cleanupRef.current = null;
     };
   }, []);
