@@ -1,11 +1,12 @@
 import { create } from "zustand";
-import type { Contact } from "@/types/contact";
+import type { Contact, AgentInfo } from "@/types/contact";
 
 interface ContactStore {
   contacts: Record<string, Contact>;
   loadFromServer: (apiBaseUrl: string, token: string) => Promise<void>;
   upsertContact: (c: Contact) => void;
   setOnline: (id: string, isOnline: boolean) => void;
+  setOnlineAgents: (id: string, agents: AgentInfo[]) => void;
   removeContact: (id: string) => void;
 }
 
@@ -28,6 +29,7 @@ export const useContactStore = create<ContactStore>((set) => ({
         isOnline: false,
         lastSeen: null,
         role: p.role,
+        onlineAgents: [],
       };
     }
     set({ contacts });
@@ -48,6 +50,18 @@ export const useContactStore = create<ContactStore>((set) => ({
             isOnline,
             lastSeen: isOnline ? existing.lastSeen : new Date().toISOString(),
           },
+        },
+      };
+    }),
+
+  setOnlineAgents: (id, agents) =>
+    set((s) => {
+      const existing = s.contacts[id];
+      if (!existing) return s;
+      return {
+        contacts: {
+          ...s.contacts,
+          [id]: { ...existing, onlineAgents: agents },
         },
       };
     }),

@@ -105,6 +105,7 @@ export function ProjectsPanel() {
         isOnline: false,
         lastSeen: null,
         role: "admin",
+        onlineAgents: [],
       });
 
       // On desktop, also register locally with the project dir
@@ -214,9 +215,9 @@ export function ProjectsPanel() {
                       <textarea
                         value={editAgentInstructions}
                         onChange={(e) => setEditAgentInstructions(e.target.value)}
-                        placeholder="Agent instructions, e.g. You write code but never run tests..."
-                        rows={3}
-                        className={inputClass + " resize-none"}
+                        placeholder="Agent instructions (supports markdown). e.g. You write code but never run tests..."
+                        rows={8}
+                        className={inputClass + " resize-y min-h-[80px] max-h-[400px]"}
                       />
                       <div className="flex gap-2">
                         <button
@@ -280,9 +281,9 @@ export function ProjectsPanel() {
               <textarea
                 value={agentInstructions}
                 onChange={(e) => setAgentInstructions(e.target.value)}
-                placeholder="Agent instructions, e.g. You write code but never run tests..."
-                rows={3}
-                className={inputClass + " resize-none"}
+                placeholder="Agent instructions (supports markdown). e.g. You write code but never run tests..."
+                rows={8}
+                className={inputClass + " resize-y min-h-[80px] max-h-[400px]"}
               />
             </>
           )}
@@ -339,9 +340,9 @@ export function ProjectsPanel() {
               <textarea
                 value={newAgentInstructions}
                 onChange={(e) => setNewAgentInstructions(e.target.value)}
-                placeholder="Agent instructions, e.g. You write code but never run tests..."
-                rows={3}
-                className={inputClass + " resize-none"}
+                placeholder="Agent instructions (supports markdown). e.g. You write code but never run tests..."
+                rows={8}
+                className={inputClass + " resize-y min-h-[80px] max-h-[400px]"}
               />
             </>
           )}

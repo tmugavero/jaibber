@@ -9,7 +9,7 @@ import { useProjectStore } from "@/stores/projectStore";
 import { runClaudeStream, listenEvent, isTauri } from "@/lib/platform";
 import { parseMentions } from "@/lib/mentions";
 import type { AblyMessage } from "@/types/message";
-import type { Contact } from "@/types/contact";
+import type { Contact, AgentInfo } from "@/types/contact";
 import type * as Ably from "ably";
 
 /**
@@ -34,6 +34,8 @@ function subscribeToProjectChannel(
     username,
     isAgent: !!localProject,
     agentName: localProject?.agentName || undefined,
+    agentInstructions: localProject?.agentInstructions || undefined,
+    machineName: localProject ? useSettingsStore.getState().settings.machineName : undefined,
   });
 
   // Use connectionId (unique per connection) instead of clientId so that the
@@ -44,36 +46,39 @@ function subscribeToProjectChannel(
   const isAgentMember = (member: { data?: { isAgent?: boolean } }) =>
     member.data?.isAgent === true;
 
+  // Extract AgentInfo from presence members and update contactStore
+  const syncAgents = () => {
+    channel.presence.get().then((members) => {
+      const remoteAgents = members.filter((m) => !isOwnConnection(m) && isAgentMember(m));
+      const agentInfos: AgentInfo[] = remoteAgents.map((m) => ({
+        connectionId: m.connectionId ?? "",
+        agentName: m.data?.agentName ?? "Agent",
+        machineName: m.data?.machineName,
+        agentInstructions: m.data?.agentInstructions,
+      }));
+      useContactStore.getState().setOnlineAgents(contact.id, agentInfos);
+      useContactStore.getState().setOnline(contact.id, remoteAgents.length > 0);
+    }).catch(() => {});
+  };
+
   channel.presence.subscribe("enter", (member) => {
     if (isOwnConnection(member)) return;
     if (!isAgentMember(member)) return;
-    useContactStore.getState().setOnline(contact.id, true);
+    syncAgents();
   });
 
-  // "update" fires when the same clientId re-enters from another connection (same
-  // user, different machine). Treat it the same as "enter".
   channel.presence.subscribe("update", (member) => {
     if (isOwnConnection(member)) return;
     if (!isAgentMember(member)) return;
-    useContactStore.getState().setOnline(contact.id, true);
+    syncAgents();
   });
 
   channel.presence.subscribe("leave", () => {
-    channel.presence.get().then((members) => {
-      const agents = members.filter((m) => !isOwnConnection(m) && isAgentMember(m));
-      if (agents.length === 0) {
-        useContactStore.getState().setOnline(contact.id, false);
-      }
-    }).catch(() => {});
+    syncAgents();
   });
 
   // Hydrate initial online state
-  channel.presence.get().then((members) => {
-    const agents = members.filter((m) => !isOwnConnection(m) && isAgentMember(m));
-    if (agents.length > 0) {
-      useContactStore.getState().setOnline(contact.id, true);
-    }
-  }).catch(() => {});
+  syncAgents();
 
   // Subscribe to messages on this project channel
   channel.subscribe(async (msg) => {

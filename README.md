@@ -1,8 +1,8 @@
 # Jaibber
 
-**A Telegram-style desktop app for managing Claude Code agents across any network.**
+**A Telegram-style chat app for managing Claude Code agents across any network.**
 
-Jaibber lets you chat with AI coding agents running on remote machines — servers, home rigs, cloud VMs — from anywhere, without VPNs, SSH tunnels, or Tailscale. Think of it as a group chat app where the members include both humans and Claude Code agents, each working in their own project codebase.
+Jaibber lets you chat with AI coding agents running on remote machines — servers, home rigs, cloud VMs — from anywhere, without VPNs, SSH tunnels, or Tailscale. Think of it as a group chat app where the members include both humans and specialized Claude Code agents, each working in their own project codebase with their own identity and instructions.
 
 ---
 
@@ -14,7 +14,7 @@ Anthropic's official offerings don't solve this either:
 - **Claude Code desktop SSH** requires network line-of-sight — fails through NAT and firewalls without a VPN
 - **Claude Code on the web** only works with GitHub-hosted repos running on Anthropic's sandboxed infrastructure, not your own machines with private codebases
 
-Jaibber fills this gap: a purpose-built desktop app with a first-class messaging transport, account system, and UI designed from scratch for the "chat with your remote Claude Code agent" workflow.
+Jaibber fills this gap: a purpose-built app with a first-class messaging transport, account system, and UI designed from scratch for the "chat with your remote Claude Code agent" workflow.
 
 ---
 
@@ -23,12 +23,15 @@ Jaibber fills this gap: a purpose-built desktop app with a first-class messaging
 | Capability | Jaibber | SSH/Tailscale DIY | Telegram bots | Claude.ai Web | CodeRemote ($49/mo) |
 |---|---|---|---|---|---|
 | Works across any network (NAT/firewall) | Yes — Ably pub/sub | No — VPN required | Yes (via Telegram) | Yes | No — Tailscale required |
+| Multi-agent specialization (@mentions) | Yes | No | No | No | No |
 | Multi-project management | Yes | Manual, one session at a time | No — one bot per project | No | No |
 | Team group chat per project | Yes | No | No | No | No |
 | Account-based identity & roles | Yes | No | No | Yes (Anthropic accts) | No |
 | Live streaming agent responses | Yes — real-time chunks | No — completion only | No — completion only | Yes | Yes |
+| Conversation continuity (follow-ups) | Yes — context window | No | No | Yes | No |
 | Your own machines & private codebases | Yes | Yes | Yes | No — cloud sandboxes only | Yes |
-| Dedicated desktop UI | Yes — Tauri native | No | No — Telegram/Discord | No — browser only | No — web UI |
+| Dedicated desktop + web UI | Yes — Tauri native + browser | No | No — Telegram/Discord | No — browser only | No — web UI |
+| Cross-platform agents | Yes — Win + Mac + Linux | Depends on VPN | Yes | No | Yes |
 | Anthropic policy compliant | Yes | Yes | Varies | Yes | Yes |
 | Setup time | ~5 minutes | ~60 minutes | ~30 minutes | Instant | ~15 minutes |
 
@@ -36,28 +39,63 @@ Jaibber fills this gap: a purpose-built desktop app with a first-class messaging
 
 ## Key Features
 
+### Agent Specialization & @Mentions
+
+Each machine registered for a project gets a named agent identity with custom instructions. A Windows machine can be "Coder" focused on writing code, while an Ubuntu server is "Tester" focused on running tests. Agent instructions support full markdown and can be as detailed as needed — paste an entire CLAUDE.md-style document as the agent's system prompt.
+
+Use `@AgentName` in your message to direct it to a specific agent. Messages without @mentions are handled by all registered agents. This prevents duplicate responses when multiple machines are online and enables cooperative workflows:
+
+```
+@Coder implement the login page with form validation
+@Tester run the full test suite and report failures
+```
+
 ### Cross-Network Real-Time Messaging
+
 Messages travel via [Ably](https://ably.com) WebSocket pub/sub — the same infrastructure used by fintech and gaming companies for global real-time communication. No VPNs, no port forwarding, no tunneling. Works from your phone on LTE to an agent running on a corporate server on a different continent. The Ably API key is server-side only; clients authenticate with scoped tokens via JWT, and can only access channels for their own projects.
 
-### Multi-Project Group Chat
-Each project gets its own dedicated Ably channel (`jaibber:project:{id}`). All team members are added to the channel and see every message — human prompts and Claude's responses alike. One Jaibber instance manages N projects simultaneously, each pointing to a different codebase on the local filesystem.
+### Streaming Responses
 
-### Local Agent Execution
-When a message arrives for a project registered on your machine, Jaibber automatically invokes Claude Code locally (`claude --print --dangerously-skip-permissions`) in the correct project directory, with the full shell environment sourced (nvm, PATH, zshrc, bashrc, ANTHROPIC_API_KEY). The agent response streams back to all channel members in real time. The Claude CLI runs under your own subscription — Jaibber is purely a messaging relay, not an API proxy.
+Claude's response streams back in real time — character by character with a live typing indicator, just like receiving a message from a person. The Rust backend reads Claude CLI stdout line-by-line and emits Tauri events; the frontend accumulates chunks locally and batches them to Ably every 200ms to avoid rate limits. Remote viewers see the response build up in real time.
+
+### Conversation Continuity
+
+Every Claude invocation includes the last 20 messages of conversation context. Follow-up questions work naturally — "can you explain that differently?" or "now add error handling to that" — because the agent knows what it just said. The context uses User/Assistant labels that Claude natively understands.
+
+### Multi-Project Group Chat
+
+Each project gets its own dedicated Ably channel. All team members see every message — human prompts and Claude's responses alike. One Jaibber instance manages N projects simultaneously, each pointing to a different codebase on the local filesystem.
+
+### Project Info Panel
+
+Click the info button on any chat header to see which agents are currently online for that project, including their names, which machine they're running on, and their full agent instructions. This works from the web client too — even if you can't register agents from the browser, you can see exactly what's configured.
+
+### Cross-Platform Agent Cooperation
+
+Register the same project on a Windows laptop and an Ubuntu server. Each machine has its own local project directory and agent identity. Both connect to the same Ably channel and cooperate — the Windows machine writes code while the Linux server runs tests, or vice versa. Agent instructions control what each machine specializes in.
 
 ### Account System with Role-Based Access
+
 Every user registers a Jaibber account (username/password or GitHub OAuth). Projects have members with `admin` or `member` roles. Admins manage membership and project settings. Auth is JWT-based (7-day tokens); project membership is enforced server-side and by Ably capability scoping.
 
-### Streaming Response Rendering
-Claude's response appears character-by-character as it arrives, with a live typing indicator — just like receiving a real-time message from a person. Code blocks are detected and rendered in monospace. Message status indicators track: sending → sent → streaming → done.
+### Organization Management & Billing
+
+Create organizations to group users and projects. Org owners and admins have access to the admin console with usage statistics, agent monitoring, and member management. Billing integrates with Stripe for per-seat subscription plans with pricing fetched dynamically.
+
+### Dual Platform: Desktop + Web
+
+Jaibber runs as both a native Tauri desktop app and a browser-based web client. The desktop app is required for agent execution (running Claude Code locally), while the web client provides full chat and project management from any browser. Platform-specific UI adapts — desktop shows agent registration and local project config, web shows a streamlined chat-focused interface.
 
 ### Persistent Chat History
-Messages are saved to the local filesystem (via tauri-plugin-store) with 1-second debouncing. Chat history survives app restarts. In-flight (streaming/sending) messages are excluded from persistence until complete.
+
+Messages are saved to local storage (tauri-plugin-store on desktop, localStorage on web) with 1-second debounced saves. Chat history survives app restarts. In-flight messages (streaming/sending) are excluded from persistence until complete. A clear button in the chat header lets you wipe conversation history per project.
 
 ### Offline Resilience
+
 If the Jaibber server is unreachable at boot, the app uses the last known settings and stays logged in. Token validation errors on network failures don't kick users to the login screen.
 
 ### Dual Authentication
+
 - **Credentials** (username + password): instant registration, no email required
 - **GitHub OAuth**: browser-based flow → JWT displayed on page → paste into app (works around Tauri's browser limitation for OAuth callbacks)
 
@@ -69,31 +107,40 @@ If the Jaibber server is unreachable at boot, the app uses the last known settin
 ┌──────────────────────────────────────────────┐
 │          Jaibber Desktop (Tauri v2)          │
 │  React 19 frontend + Rust backend            │
-│  (local Claude Code invocation, OS storage)  │
+│  Local Claude Code execution, OS storage     │
+│  Agent identity: name + instructions         │
 └───────────────────┬──────────────────────────┘
                     │ Ably WebSocket pub/sub
          ┌──────────▼──────────┐
          │       Ably          │
-         │ jaibber:project:{id}│  ← per-project group chat
-         │ jaibber:presence    │  ← global online status
+         │ jaibber:project:{id}│  ← per-project group chat + streaming chunks
+         │ jaibber:presence    │  ← global online status + agent info
          └──────────┬──────────┘
                     │ REST API (JWT Bearer auth)
          ┌──────────▼──────────────────────────┐
          │  jaibber-server (Next.js on Vercel) │
          │  • User accounts & JWT auth         │
          │  • Project & membership CRUD        │
+         │  • Organization management          │
          │  • Ably token issuance (scoped)     │
+         │  • Stripe billing integration       │
          │  • Neon Postgres database           │
          └─────────────────────────────────────┘
+
+┌──────────────────────────────────────────────┐
+│          Jaibber Web (Browser)               │
+│  Same React frontend, no Rust               │
+│  Chat + project management (no agent exec)  │
+└──────────────────────────────────────────────┘
 ```
 
-**Frontend:** React 19 + TypeScript + Zustand state management + Ably JS SDK v2 + Tauri v2 plugins
+**Frontend:** React 19 + TypeScript + Zustand state management + Ably JS SDK v2 + TailwindCSS + shadcn/ui
 
-**Backend:** Next.js 15 App Router, Drizzle ORM, Neon serverless Postgres, jose JWT, bcryptjs, Ably REST SDK
+**Desktop shell:** Tauri v2 (Rust) — handles local Claude Code invocation with streaming, settings persistence, OS integration
 
-**Desktop shell:** Tauri v2 (Rust) — handles local Claude Code invocation, settings persistence (tauri-plugin-store), OS integration
+**Backend:** Next.js 15 App Router, Drizzle ORM, Neon serverless Postgres, jose JWT, bcryptjs, Ably REST SDK, Stripe
 
-**Transport:** Ably WebSocket pub/sub — token auth (scoped per user's project channels), 1-hour TTL, clientId = user UUID
+**Transport:** Ably WebSocket pub/sub — token auth scoped per user's project channels, clientId = user UUID
 
 ---
 
@@ -104,28 +151,34 @@ If the Jaibber server is unreachable at boot, the app uses the last known settin
 1. You type a message in the ChatWindow for a project and hit Enter
 2. The message is published to `jaibber:project:{projectId}` via Ably
 3. All project members (humans and agents) receive it simultaneously
-4. Any machine with that project registered locally detects it, invokes `claude --print` in the project directory, and begins streaming the response back
-5. The response chunks appear in everyone's ChatWindow in real time
+4. @mention routing: if the message contains `@AgentName`, only that agent responds; otherwise all registered agents respond
+5. Each responding agent streams its output back via Ably chunks, appearing in real time in everyone's ChatWindow
 
-### Agent Response Flow
+### Agent Response Flow (Streaming)
 
 ```
 User message → Ably channel → all members receive
                                     ↓
                     [machines registered for this project]
+                    [@mention routing — skip if not targeted]
                                     ↓
-                    Tauri: run_claude(prompt, projectDir)
+                    Build conversation context (last 20 messages)
+                    Prepend agent instructions (system prompt)
+                                    ↓
+                    Tauri: run_claude_stream(prompt, projectDir, ...)
                                     ↓
                     bash -c 'ANTHROPIC_API_KEY=... claude --print ...'
                                     ↓
-                    stdout → Ably response publish
+                    stdout line-by-line → Tauri events → chatStore
                                     ↓
-                    All members see streamed response
+                    Chunk batching (200ms) → Ably publish
+                                    ↓
+                    All members see streamed response in real time
 ```
 
-### Project Membership
+### Project Membership & Agent Registration
 
-Projects are server-side entities. Any Jaibber user can be added to a project as admin or member. "Registering" a project locally means pointing a local filesystem path at a server project ID — that machine will then act as the Claude Code agent for that project.
+Projects are server-side entities. Any Jaibber user can be added to a project as admin or member. "Registering" a project locally means pointing a local filesystem path at a server project ID and configuring an agent name and instructions — that machine will then act as a named Claude Code agent for that project.
 
 ---
 
@@ -134,8 +187,8 @@ Projects are server-side entities. Any Jaibber user can be added to a project as
 ### Prerequisites
 
 - Node.js 20+ or [Bun](https://bun.sh/)
-- [Rust + Cargo](https://rustup.rs/)
-- [Tauri CLI v2](https://tauri.app/start/prerequisites/)
+- [Rust + Cargo](https://rustup.rs/) (desktop only)
+- [Tauri CLI v2](https://tauri.app/start/prerequisites/) (desktop only)
 - [Claude Code CLI](https://claude.ai/code) installed on any machine that will run agents
 - A Jaibber server instance (deploy your own or use a shared one)
 
@@ -171,7 +224,7 @@ Produces platform-native installers in `src-tauri/target/release/bundle/`:
 
 ### Server
 
-See [jaibber-server README](../jaibber-server/README.md) for deploying the backend to Vercel + Neon Postgres.
+See [jaibber-server](https://github.com/your-org/jaibber-server) for deploying the backend to Vercel + Neon Postgres.
 
 ---
 
@@ -193,13 +246,25 @@ On any machine where Claude Code should automatically respond to incoming prompt
 1. Install Claude Code: `npm install -g @anthropic-ai/claude-code`
 2. Run Jaibber and log in with your account
 3. Open **Settings** → enter your **Anthropic API key** and a **machine name** (e.g. "dev-server", "macbook-pro")
-4. Click the **folder icon** → select a project → click **Register local path**
+4. Click the **folder icon** → **Link existing project** or **Create new project**
 5. Enter the absolute path to the project's codebase on this machine
-6. The machine is now live — it will appear as online in the project channel and respond to prompts automatically
+6. Set an **agent name** (e.g. "Coder", "Tester") and optionally paste **agent instructions** (supports full markdown)
+7. The machine is now live — it will appear as online in the project channel and respond to prompts automatically
 
-### Team Collaboration
+### Multi-Agent Cooperation
 
-Multiple humans can join the same project channel. All messages — human prompts, agent responses, and system events — are visible to all members. The green online pulse on a project card indicates that at least one agent machine is currently connected. Multiple machines can be registered to the same project (useful for redundancy or load distribution).
+Register the same project on multiple machines with different agent names and instructions:
+
+| Machine | Agent Name | Instructions |
+|---------|-----------|-------------|
+| Windows laptop | Coder | "You write code. Focus on implementation, clean code, and TypeScript best practices." |
+| Ubuntu server | Tester | "You run tests and review code. Never modify source files, only run test commands and report results." |
+
+Then direct messages: `@Coder implement the login form` or `@Tester run the test suite`. Messages without @mentions are handled by all agents.
+
+### Web Client
+
+Access Jaibber from any browser to chat and manage projects without installing the desktop app. The web client has full chat and project creation capabilities. Agent execution (running Claude Code) requires the desktop app — the web shows which agents are online and their configuration via the project info panel.
 
 ---
 
@@ -239,12 +304,15 @@ Multiple humans can join the same project channel. All messages — human prompt
 
 ### Jaibber's Position
 
-Jaibber is the only product that combines all five of:
-1. A dedicated native desktop UI built for this workflow
-2. Account-based identity with project membership and roles
+Jaibber is the only product that combines all of:
+1. A dedicated native desktop + web UI built for this workflow
+2. Account-based identity with project membership, roles, and organizations
 3. A real-time pub/sub transport that works across any network without VPN
 4. Multi-project group chat with per-project channels
-5. Local agent execution on your own machines with your own codebase
+5. Named agent specialization with @mention routing
+6. Streaming responses with conversation continuity
+7. Local agent execution on your own machines with your own codebase
+8. Cross-platform agent cooperation (Windows + macOS + Linux)
 
 ---
 
@@ -263,6 +331,7 @@ Jaibber is the only product that combines all five of:
 | Database | Neon serverless PostgreSQL |
 | ORM | Drizzle ORM |
 | Auth | jose (HS256 JWT) + bcryptjs + GitHub OAuth |
+| Billing | Stripe (dynamic pricing) |
 | Deployment | Vercel (server) + native platform installers (client) |
 
 ---
@@ -272,11 +341,11 @@ Jaibber is the only product that combines all five of:
 - **Mobile companion app** — iOS/Android for approving agent actions and monitoring on the go
 - **Approval UI** — show diffs and prompt for confirmation before the agent writes files or runs commands
 - **Slash commands** — `/status`, `/files`, `/cancel`, `/approve` in the chat input
-- **@mentions** — route a prompt to a specific registered machine by name
 - **Voice notes** — record audio → Whisper transcription → prompt
 - **Usage tracking** — per-project token cost and invocation count
 - **Webhook notifications** — email or Slack pings when a long agent task completes
 - **Self-hostable transport** — Soketi or Centrifugo as a drop-in Ably alternative
+- **Session resume** — `claude --resume` support for long-running multi-turn sessions
 
 ---
 
