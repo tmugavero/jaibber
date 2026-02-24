@@ -107,6 +107,20 @@ export async function runClaude(prompt: string, projectDir: string): Promise<str
   return invoke<string>("run_claude", { prompt, projectDir });
 }
 
+export async function runClaudeStream(params: {
+  prompt: string;
+  projectDir: string;
+  responseId: string;
+  systemPrompt: string;
+  conversationContext: string;
+}): Promise<void> {
+  if (!isTauri) {
+    throw new Error("Claude streaming is only available on desktop agent machines.");
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke<void>("run_claude_stream", params);
+}
+
 // ── Shell (open URL) ─────────────────────────────────────────────────
 
 export async function openUrl(url: string): Promise<void> {

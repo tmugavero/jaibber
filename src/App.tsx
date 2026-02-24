@@ -113,7 +113,14 @@ function App({ onRequireLogin }: AppProps = {}) {
         // ── 6. Load persisted local projects (agent machine state) ─────────
         const localProjects = await storage.get<ReturnType<typeof useProjectStore.getState>["projects"]>("local_projects");
         if (localProjects) {
-          useProjectStore.getState().setProjects(localProjects);
+          // Migrate old projects that lack agentName/agentInstructions
+          const machineName = useSettingsStore.getState().settings.machineName || "Agent";
+          const migrated = localProjects.map((p) => ({
+            ...p,
+            agentName: p.agentName || machineName,
+            agentInstructions: p.agentInstructions ?? "",
+          }));
+          useProjectStore.getState().setProjects(migrated);
         }
 
         // ── 7. Load chat history ───────────────────────────────────────────

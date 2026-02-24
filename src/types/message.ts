@@ -14,6 +14,8 @@ export interface AblyMessage {
   projectId: string;      // replaces "to" — channel routing is implicit
   text: string;
   messageId: string;
-  type: "message" | "response" | "typing" | "done" | "error";
+  type: "message" | "response" | "typing" | "done" | "error" | "chunk";
   responseId?: string;    // sent in "typing" so receivers can pre-create bubble with correct ID
+  agentName?: string;     // set on agent messages (typing/response/chunk/error)
+  mentions?: string[];    // parsed @mention targets from user messages
 }

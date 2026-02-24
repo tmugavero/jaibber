@@ -5,6 +5,8 @@ export interface LocalProject {
   name: string;             // display name (synced from server)
   projectDir: string;       // absolute local filesystem path
   ablyChannelName: string;  // "jaibber:project:{projectId}"
+  agentName: string;        // e.g. "Coder", "Tester" — defaults to machineName
+  agentInstructions: string; // system prompt prepended to every Claude call
 }
 
 interface ProjectStore {

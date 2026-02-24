@@ -6,7 +6,8 @@ import { useChatStore } from "@/stores/chatStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useProjectStore } from "@/stores/projectStore";
-import { runClaude, isTauri } from "@/lib/platform";
+import { runClaudeStream, listenEvent, isTauri } from "@/lib/platform";
+import { parseMentions } from "@/lib/mentions";
 import type { AblyMessage } from "@/types/message";
 import type { Contact } from "@/types/contact";
 import type * as Ably from "ably";
@@ -28,7 +29,12 @@ function subscribeToProjectChannel(
   const localProject = useProjectStore.getState().projects.find(
     (p) => p.projectId === contact.id
   );
-  channel.presence.enter({ userId, username, isAgent: !!localProject });
+  channel.presence.enter({
+    userId,
+    username,
+    isAgent: !!localProject,
+    agentName: localProject?.agentName || undefined,
+  });
 
   // Use connectionId (unique per connection) instead of clientId so that the
   // same Jaibber account on two machines counts as two distinct presence members.
@@ -96,13 +102,21 @@ function subscribeToProjectChannel(
           (p) => p.projectId === contact.id
         );
         if (localProject) {
+          const agentName = localProject.agentName || "Agent";
+
+          // @mention routing: if mentions exist and none match this agent → skip
+          const mentions = parseMentions(payload.text);
+          if (mentions.length > 0 && !mentions.includes(agentName.toLowerCase())) {
+            return; // another agent is targeted
+          }
+
           const responseId = uuidv4();
 
           useChatStore.getState().addMessage({
             id: responseId,
             conversationId: convId,
             sender: "them",
-            senderName: "Claude",
+            senderName: agentName,
             text: "",
             timestamp: new Date().toISOString(),
             status: "streaming",
@@ -110,39 +124,120 @@ function subscribeToProjectChannel(
 
           channel.publish("message", {
             from: userId,
-            fromUsername: "Claude",
+            fromUsername: agentName,
             projectId: contact.id,
             text: "",
             messageId: uuidv4(),
             responseId,
             type: "typing",
+            agentName,
           } satisfies AblyMessage);
 
-          try {
-            const result = await runClaude(payload.text, localProject.projectDir);
-            useChatStore.getState().appendChunk(convId, responseId, result);
-            useChatStore.getState().markDone(convId, responseId);
+          // Build conversation context from recent chat history
+          const recentMessages = (useChatStore.getState().messages[convId] ?? [])
+            .filter((m) => m.status === "done" && m.id !== responseId)
+            .slice(-20)
+            .map((m) => `[${m.senderName || m.sender}]: ${m.text}`)
+            .join("\n");
 
+          // Ably chunk batching: accumulate chunks, flush every 200ms
+          let chunkBuffer = "";
+          let flushTimer: ReturnType<typeof setTimeout> | null = null;
+          const flushChunks = () => {
+            if (!chunkBuffer) return;
+            const text = chunkBuffer;
+            chunkBuffer = "";
             channel.publish("message", {
               from: userId,
-              fromUsername: "Claude",
+              fromUsername: agentName,
               projectId: contact.id,
-              text: result,
+              text,
               messageId: responseId,
-              type: "response",
+              type: "chunk",
+              agentName,
             } satisfies AblyMessage);
+          };
+
+          // Listen for streaming events from Rust
+          const unlisten = await listenEvent<{
+            responseId: string;
+            chunk: string;
+            done: boolean;
+            error: string | null;
+          }>("claude-chunk", (event) => {
+            if (event.responseId !== responseId) return;
+
+            if (event.done) {
+              // Flush remaining buffer
+              if (flushTimer) clearTimeout(flushTimer);
+              flushChunks();
+
+              useChatStore.getState().markDone(convId, responseId);
+              const fullText = (useChatStore.getState().messages[convId] ?? [])
+                .find((m) => m.id === responseId)?.text ?? "";
+              channel.publish("message", {
+                from: userId,
+                fromUsername: agentName,
+                projectId: contact.id,
+                text: fullText,
+                messageId: responseId,
+                type: "response",
+                agentName,
+              } satisfies AblyMessage);
+              unlisten();
+            } else if (event.error) {
+              if (flushTimer) clearTimeout(flushTimer);
+              const errText = `Agent error: ${event.error}`;
+              useChatStore.getState().appendChunk(convId, responseId, errText);
+              useChatStore.getState().updateStatus(convId, responseId, "error");
+              channel.publish("message", {
+                from: userId,
+                fromUsername: agentName,
+                projectId: contact.id,
+                text: errText,
+                messageId: responseId,
+                type: "error",
+                agentName,
+              } satisfies AblyMessage);
+              unlisten();
+            } else {
+              // Streaming chunk — update local store immediately, batch for Ably
+              useChatStore.getState().appendChunk(convId, responseId, event.chunk);
+              chunkBuffer += event.chunk;
+              if (!flushTimer) {
+                flushTimer = setTimeout(() => {
+                  flushTimer = null;
+                  flushChunks();
+                }, 200);
+              }
+            }
+          });
+
+          // Kick off streaming Claude process
+          try {
+            await runClaudeStream({
+              prompt: payload.text,
+              projectDir: localProject.projectDir,
+              responseId,
+              systemPrompt: localProject.agentInstructions || "",
+              conversationContext: recentMessages,
+            });
           } catch (err) {
-            const errText = `⚠️ Agent error: ${err}`;
+            // runClaudeStream rejects if spawn fails
+            if (flushTimer) clearTimeout(flushTimer);
+            const errText = `Agent error: ${err}`;
             useChatStore.getState().appendChunk(convId, responseId, errText);
             useChatStore.getState().updateStatus(convId, responseId, "error");
             channel.publish("message", {
               from: userId,
-              fromUsername: "Claude",
+              fromUsername: agentName,
               projectId: contact.id,
               text: errText,
               messageId: responseId,
               type: "error",
+              agentName,
             } satisfies AblyMessage);
+            unlisten();
           }
         }
       } // end isTauri agent check
@@ -158,6 +253,9 @@ function subscribeToProjectChannel(
         timestamp: new Date().toISOString(),
         status: "streaming",
       });
+    } else if (payload.type === "chunk") {
+      if (isMine) return;
+      useChatStore.getState().appendChunk(convId, payload.messageId, payload.text);
     } else if (payload.type === "response" || payload.type === "done" || payload.type === "error") {
       if (isMine) return;
       const isError = payload.type === "error";
