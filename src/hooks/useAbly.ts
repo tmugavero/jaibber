@@ -82,6 +82,11 @@ function subscribeToProjectChannel(
 
     const convId = contact.id;
     const isMine = payload.from === userId;
+    // Use connectionId to detect messages from THIS specific connection.
+    // isMine checks userId (same user on any device), but for agent responses
+    // we need to know if THIS connection published it — otherwise the web client
+    // (same user, different connection) would skip the agent's responses.
+    const isFromThisConnection = msg.connectionId === ably.connection.id;
 
     if (payload.type === "message") {
       // All members see all messages (group chat)
@@ -242,7 +247,7 @@ function subscribeToProjectChannel(
         }
       } // end isTauri agent check
     } else if (payload.type === "typing") {
-      if (isMine) return;
+      if (isFromThisConnection) return;
       const bubbleId = payload.responseId ?? `typing-${payload.from}-${Date.now()}`;
       useChatStore.getState().addMessage({
         id: bubbleId,
@@ -254,10 +259,10 @@ function subscribeToProjectChannel(
         status: "streaming",
       });
     } else if (payload.type === "chunk") {
-      if (isMine) return;
+      if (isFromThisConnection) return;
       useChatStore.getState().appendChunk(convId, payload.messageId, payload.text);
     } else if (payload.type === "response" || payload.type === "done" || payload.type === "error") {
-      if (isMine) return;
+      if (isFromThisConnection) return;
       const isError = payload.type === "error";
       useChatStore.getState().replaceMessage(
         convId,

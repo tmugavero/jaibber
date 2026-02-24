@@ -158,8 +158,10 @@ claude --print --dangerously-skip-permissions '{safe_prompt}'"#
     tokio::spawn(async move {
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
+        let mut got_output = false;
 
         while let Ok(Some(line)) = lines.next_line().await {
+            got_output = true;
             let _ = win.emit("claude-chunk", serde_json::json!({
                 "responseId": rid,
                 "chunk": format!("{}\n", line),
@@ -173,7 +175,9 @@ claude --print --dangerously-skip-permissions '{safe_prompt}'"#
         let exit_status = status.ok();
         let success = exit_status.map(|s| s.success()).unwrap_or(false);
 
-        if success {
+        // If we got output, treat as success even if exit code is non-zero.
+        // The claude CLI can exit non-zero after producing valid output.
+        if success || got_output {
             let _ = win.emit("claude-chunk", serde_json::json!({
                 "responseId": rid,
                 "chunk": "",
@@ -185,6 +189,7 @@ claude --print --dangerously-skip-permissions '{safe_prompt}'"#
                 .and_then(|s| s.code())
                 .map(|c| c.to_string())
                 .unwrap_or_else(|| "?".into());
+            // Also capture stderr for a more useful error message
             let _ = win.emit("claude-chunk", serde_json::json!({
                 "responseId": rid,
                 "chunk": "",
