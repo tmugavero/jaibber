@@ -138,12 +138,16 @@ function subscribeToProjectChannel(
             agentName,
           } satisfies AblyMessage);
 
-          // Build conversation context from recent chat history
+          // Build conversation context from recent chat history.
+          // Use User:/Assistant: labels that Claude naturally understands.
           const recentMessages = (useChatStore.getState().messages[convId] ?? [])
             .filter((m) => m.status === "done" && m.id !== responseId)
             .slice(-20)
-            .map((m) => `[${m.senderName || m.sender}]: ${m.text}`)
-            .join("\n");
+            .map((m) => {
+              const role = m.sender === "me" ? "User" : `Assistant (${m.senderName || "Agent"})`;
+              return `${role}: ${m.text}`;
+            })
+            .join("\n\n");
 
           // Ably chunk batching: accumulate chunks, flush every 200ms
           let chunkBuffer = "";

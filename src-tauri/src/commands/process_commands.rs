@@ -103,16 +103,21 @@ pub async fn run_claude_stream(
         return Err(JaibberError::Other("project_dir must not be empty".into()));
     }
 
-    // Build full prompt: system instructions + conversation context + user message
+    // Build full prompt: system instructions + conversation context + user message.
+    // The prompt must clearly separate context from the actual request so Claude
+    // doesn't interpret the history as a cut-off conversation.
     let mut full_prompt = String::new();
     if !system_prompt.is_empty() {
         full_prompt.push_str(&system_prompt);
         full_prompt.push_str("\n\n");
     }
     if !conversation_context.is_empty() {
-        full_prompt.push_str("[Previous conversation]\n");
+        full_prompt.push_str(
+            "Below is the recent conversation history for context. \
+             Respond ONLY to the final user message.\n\n"
+        );
         full_prompt.push_str(&conversation_context);
-        full_prompt.push_str("\n\n[Current message]\n");
+        full_prompt.push_str("\n\n---\n\n");
     }
     full_prompt.push_str(&prompt);
 
