@@ -10,6 +10,7 @@ interface ChatStore {
   appendChunk: (conversationId: string, messageId: string, chunk: string) => void;
   markDone: (conversationId: string, messageId: string) => void;
   updateStatus: (conversationId: string, messageId: string, status: Message["status"]) => void;
+  clearConversation: (conversationId: string) => void;
 }
 
 function withSave(messages: Record<string, Message[]>): Record<string, Message[]> {
@@ -75,5 +76,10 @@ export const useChatStore = create<ChatStore>((set) => ({
         ),
       };
       return { messages: withSave(updated) };
+    }),
+  clearConversation: (conversationId) =>
+    set((s) => {
+      const { [conversationId]: _, ...rest } = s.messages;
+      return { messages: withSave(rest) };
     }),
 }));

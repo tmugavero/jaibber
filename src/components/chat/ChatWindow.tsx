@@ -55,12 +55,25 @@ export function ChatWindow({ contactId, onBack }: Props) {
             }`}
           />
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <div className="font-semibold text-sm text-foreground">{contact?.name ?? contactId}</div>
           <div className="text-xs text-muted-foreground">
             {contact?.isOnline ? "online" : contact?.lastSeen ? `last seen ${new Date(contact.lastSeen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "offline"}
           </div>
         </div>
+        {msgCount > 0 && (
+          <button
+            onClick={() => {
+              if (confirm("Clear chat history for this project?")) {
+                useChatStore.getState().clearConversation(contactId);
+              }
+            }}
+            className="text-xs text-muted-foreground hover:text-destructive transition-colors px-2 py-1 rounded"
+            title="Clear chat history"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       {/* Messages */}
