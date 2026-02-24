@@ -14,4 +14,6 @@ export interface Contact {
   lastSeen: string | null;
   role: "admin" | "member";
   onlineAgents: AgentInfo[];  // agents currently online for this project
+  createdAt: string | null;   // ISO timestamp from server
+  memberCount: number | null; // number of members from server
 }

@@ -30,6 +30,8 @@ export const useContactStore = create<ContactStore>((set) => ({
         lastSeen: null,
         role: p.role,
         onlineAgents: [],
+        createdAt: p.createdAt ?? null,
+        memberCount: p.memberCount ?? null,
       };
     }
     set({ contacts });
