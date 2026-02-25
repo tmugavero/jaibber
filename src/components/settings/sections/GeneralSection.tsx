@@ -1,8 +1,15 @@
+import { useState } from "react";
 import { useAuthStore } from "@/stores/authStore";
-import { storage } from "@/lib/platform";
+import { storage, saveSettings, isTauri } from "@/lib/platform";
+import { useSettingsStore } from "@/stores/settingsStore";
 
 export function GeneralSection() {
   const username = useAuthStore((s) => s.username);
+  const settings = useSettingsStore((s) => s.settings);
+  const [machineName, setMachineName] = useState(settings.machineName);
+  const [apiKey, setApiKey] = useState(settings.anthropicApiKey ?? "");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const handleSignOut = async () => {
     useAuthStore.getState().clearAuth();
@@ -14,6 +21,26 @@ export function GeneralSection() {
     ]);
     window.location.reload();
   };
+
+  const handleSaveSettings = async () => {
+    setSaving(true);
+    try {
+      const updated = {
+        ...settings,
+        machineName,
+        anthropicApiKey: apiKey || null,
+      };
+      await saveSettings(updated);
+      await storage.set("schema_version", 2);
+      useSettingsStore.getState().setSettings(updated);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputClass = "w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50";
 
   return (
     <div className="space-y-8">
@@ -31,6 +58,50 @@ export function GeneralSection() {
           </div>
         </div>
       </div>
+
+      {isTauri && (
+        <div className="border-b border-border pb-6">
+          <h2 className="text-lg font-semibold text-foreground mb-1">This Machine</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Settings specific to this desktop installation.
+          </p>
+          <div className="space-y-4 max-w-md">
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                Machine name <span className="font-normal opacity-60">(cosmetic label)</span>
+              </label>
+              <input
+                type="text"
+                value={machineName}
+                onChange={(e) => setMachineName(e.target.value)}
+                placeholder="e.g. dev-laptop, ubuntu-agent"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                Anthropic API Key <span className="font-normal opacity-60">(optional)</span>
+              </label>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="sk-ant-..."
+                className={inputClass + " font-mono"}
+              />
+            </div>
+
+            <button
+              onClick={handleSaveSettings}
+              disabled={saving}
+              className="bg-primary text-primary-foreground rounded-lg px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-all disabled:opacity-50"
+            >
+              {saved ? "Saved!" : saving ? "Saving..." : "Save Settings"}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="border-b border-border pb-6">
         <h2 className="text-lg font-semibold text-foreground mb-4">Account</h2>

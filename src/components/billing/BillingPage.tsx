@@ -165,7 +165,7 @@ export function BillingPage() {
                       : "border border-primary text-primary hover:bg-primary/10",
                   )}
                 >
-                  {loading === plan.id ? "Loading..." : `Upgrade to ${plan.name}`}
+                  {loading === plan.id ? "Loading..." : `Upgrade to ${plan.name.replace("Jaibber ", "")}`}
                 </button>
               )}
             </div>

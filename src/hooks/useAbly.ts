@@ -6,17 +6,24 @@ import { useChatStore } from "@/stores/chatStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useProjectStore, type LocalProject } from "@/stores/projectStore";
-import { runClaudeStream, listenEvent, isTauri } from "@/lib/platform";
+import { runAgentStream, listenEvent, isTauri } from "@/lib/platform";
 import { parseMentions } from "@/lib/mentions";
-import type { AblyMessage } from "@/types/message";
+import type { AblyMessage, ExecutionMode } from "@/types/message";
 import type { Contact, AgentInfo } from "@/types/contact";
 import type * as Ably from "ably";
 
 /** Max depth for agent-to-agent response chains. Prevents infinite loops. */
 const MAX_RESPONSE_DEPTH = 3;
 
+/** Plan-mode system prompt prefix — instructs agent to analyze only, not execute. */
+const PLAN_MODE_PREFIX =
+  "You are in PLAN MODE. Analyze the request and provide a detailed plan of what changes " +
+  "you would make, including specific files and code snippets. Do NOT execute any file " +
+  "modifications, write any files, or run any commands that change state. You may read " +
+  "files for context. Format your plan clearly with numbered steps.";
+
 /**
- * Shared agent response logic: creates a streaming bubble, runs Claude,
+ * Shared agent response logic: creates a streaming bubble, runs the agent,
  * publishes chunks/response to the channel. Used for both human→agent and
  * agent→agent message handling.
  */
@@ -28,7 +35,8 @@ async function respondToMessage(
   userId: string,
   promptText: string,
   incomingDepth: number,
-  incomingChain: string[]
+  incomingChain: string[],
+  executionMode: ExecutionMode = "auto"
 ) {
   const convId = contact.id;
   const nextDepth = incomingDepth + 1;
@@ -43,6 +51,7 @@ async function respondToMessage(
     text: "",
     timestamp: new Date().toISOString(),
     status: "streaming",
+    executionMode,
   });
 
   channel.publish("message", {
@@ -90,7 +99,7 @@ async function respondToMessage(
     chunk: string;
     done: boolean;
     error: string | null;
-  }>("claude-chunk", (event) => {
+  }>("agent-chunk", (event) => {
     if (event.responseId !== responseId) return;
 
     if (event.done) {
@@ -140,13 +149,19 @@ async function respondToMessage(
     }
   });
 
-  // Kick off streaming Claude process
+  // Build system prompt, prepending plan-mode instructions if needed
+  let systemPrompt = localProject.agentInstructions || "";
+  if (executionMode === "plan") {
+    systemPrompt = PLAN_MODE_PREFIX + (systemPrompt ? "\n\n" + systemPrompt : "");
+  }
+
+  // Kick off streaming agent process
   try {
-    await runClaudeStream({
+    await runAgentStream({
       prompt: promptText,
       projectDir: localProject.projectDir,
       responseId,
-      systemPrompt: localProject.agentInstructions || "",
+      systemPrompt,
       conversationContext: recentMessages,
     });
   } catch (err) {
@@ -269,6 +284,7 @@ function subscribeToProjectChannel(
         text: payload.text,
         timestamp: new Date().toISOString(),
         status: "done",
+        executionMode: payload.executionMode,
       });
 
       // Agent response: check if this machine should respond
@@ -282,7 +298,7 @@ function subscribeToProjectChannel(
           const chain = payload.respondingChain ?? [];
 
           if (shouldAgentRespond(payload.text, name, depth, chain)) {
-            respondToMessage(channel, contact, lp, name, userId, payload.text, depth, chain);
+            respondToMessage(channel, contact, lp, name, userId, payload.text, depth, chain, payload.executionMode ?? "auto");
           }
         }
       }
@@ -328,7 +344,7 @@ function subscribeToProjectChannel(
             mentions.includes(name.toLowerCase()) &&
             shouldAgentRespond(payload.text, name, depth, chain)
           ) {
-            respondToMessage(channel, contact, lp, name, userId, payload.text, depth, chain);
+            respondToMessage(channel, contact, lp, name, userId, payload.text, depth, chain, "auto");
           }
         }
       }
@@ -472,7 +488,7 @@ export function useAbly() {
 }
 
 /** Send a chat message to a project channel. Returns the local message id. */
-export function sendMessage(projectId: string, text: string): string {
+export function sendMessage(projectId: string, text: string, executionMode: ExecutionMode = "auto"): string {
   const ably = getAbly();
   const { userId, username } = useAuthStore.getState();
   const contact = useContactStore.getState().contacts[projectId];
@@ -486,6 +502,7 @@ export function sendMessage(projectId: string, text: string): string {
     text,
     timestamp: new Date().toISOString(),
     status: "sending",
+    executionMode,
   });
 
   if (ably && contact && userId && username) {
@@ -497,6 +514,7 @@ export function sendMessage(projectId: string, text: string): string {
       text,
       messageId,
       type: "message",
+      executionMode,
     } satisfies AblyMessage).then(() => {
       useChatStore.getState().updateStatus(projectId, messageId, "sent");
     }).catch(() => {

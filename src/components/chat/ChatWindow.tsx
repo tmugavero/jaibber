@@ -8,6 +8,7 @@ import { MessageInput } from "./MessageInput";
 import { sendMessage } from "@/hooks/useAbly";
 import { getAbly } from "@/lib/ably";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import type { ExecutionMode } from "@/types/message";
 
 interface ProjectMember {
   userId: string;
@@ -34,6 +35,7 @@ export function ChatWindow({ contactId, onBack }: Props) {
   const [addingMember, setAddingMember] = useState(false);
   const [addMemberMsg, setAddMemberMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>("auto");
 
   const msgCount = messages?.length ?? 0;
 
@@ -101,7 +103,7 @@ export function ChatWindow({ contactId, onBack }: Props) {
   };
 
   const handleSend = (text: string) => {
-    sendMessage(contactId, text);
+    sendMessage(contactId, text, executionMode);
   };
 
   const hasStreamingFromThem = messages?.some(
@@ -186,7 +188,7 @@ export function ChatWindow({ contactId, onBack }: Props) {
               </div>
               {agents.length === 0 ? (
                 <div className="text-xs text-muted-foreground italic">
-                  No agents online. Register this project on a desktop machine to run Claude.
+                  No agents online. Register this project on a desktop machine to run an agent.
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -309,7 +311,34 @@ export function ChatWindow({ contactId, onBack }: Props) {
           You are viewing this project as an org admin. Join the project to participate.
         </div>
       ) : (
-        <MessageInput onSend={handleSend} disabled={hasStreamingFromThem} />
+        <>
+          <MessageInput onSend={handleSend} disabled={hasStreamingFromThem} />
+          {/* Plan / Auto mode toggle — below input, like Claude Code */}
+          <div className="flex items-center pb-2 pt-0" style={{ paddingLeft: "3.75rem" }}>
+            <div className="flex bg-muted/40 rounded-lg p-0.5 text-[11px]">
+              <button
+                onClick={() => setExecutionMode("plan")}
+                className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                  executionMode === "plan"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Plan
+              </button>
+              <button
+                onClick={() => setExecutionMode("auto")}
+                className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                  executionMode === "auto"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Auto
+              </button>
+            </div>
+          </div>
+        </>
       )}
       <ConfirmDialog
         open={showClearConfirm}

@@ -25,8 +25,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             settings_commands::get_settings,
             settings_commands::save_settings,
-            process_commands::run_claude,
-            process_commands::run_claude_stream,
+            process_commands::run_agent,
+            process_commands::run_agent_stream,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Jaibber");

@@ -4,7 +4,7 @@ import type { AppSettings } from "@/types/settings";
 const DEFAULT_SETTINGS: AppSettings = {
   anthropicApiKey: null,
   machineName: "",
-  apiBaseUrl: "",
+  apiBaseUrl: "https://jaibber-server.vercel.app",
 };
 
 interface SettingsStore {

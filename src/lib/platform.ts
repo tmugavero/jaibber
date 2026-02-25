@@ -75,7 +75,7 @@ export const storage = {
 const DEFAULT_SETTINGS: AppSettings = {
   anthropicApiKey: null,
   machineName: "",
-  apiBaseUrl: "",
+  apiBaseUrl: "https://jaibber-server.vercel.app",
 };
 
 export async function getSettings(): Promise<AppSettings> {
@@ -97,17 +97,17 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
   await storage.set("app_settings", settings);
 }
 
-// ── Claude execution ─────────────────────────────────────────────────
+// ── Agent execution ──────────────────────────────────────────────────
 
-export async function runClaude(prompt: string, projectDir: string): Promise<string> {
+export async function runAgent(prompt: string, projectDir: string): Promise<string> {
   if (!isTauri) {
-    throw new Error("Claude execution is only available on desktop agent machines.");
+    throw new Error("Agent execution is only available on desktop agent machines.");
   }
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<string>("run_claude", { prompt, projectDir });
+  return invoke<string>("run_agent", { prompt, projectDir });
 }
 
-export async function runClaudeStream(params: {
+export async function runAgentStream(params: {
   prompt: string;
   projectDir: string;
   responseId: string;
@@ -115,10 +115,10 @@ export async function runClaudeStream(params: {
   conversationContext: string;
 }): Promise<void> {
   if (!isTauri) {
-    throw new Error("Claude streaming is only available on desktop agent machines.");
+    throw new Error("Agent streaming is only available on desktop agent machines.");
   }
   const { invoke } = await import("@tauri-apps/api/core");
-  await invoke<void>("run_claude_stream", params);
+  await invoke<void>("run_agent_stream", params);
 }
 
 // ── Shell (open URL) ─────────────────────────────────────────────────

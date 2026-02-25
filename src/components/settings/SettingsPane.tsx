@@ -3,7 +3,6 @@ import { isTauri } from "@/lib/platform";
 import { useOrgStore } from "@/stores/orgStore";
 import { GeneralSection } from "./sections/GeneralSection";
 import { SecuritySection } from "./sections/SecuritySection";
-import { MachineSection } from "./sections/MachineSection";
 import { ProjectsSection } from "./sections/ProjectsSection";
 import { OrganizationSection } from "./sections/OrganizationSection";
 import { BillingSection } from "./sections/BillingSection";
@@ -13,7 +12,6 @@ import { cn } from "@/lib/cn";
 type Section =
   | "general"
   | "security"
-  | "machine"
   | "projects"
   | "organization"
   | "billing"
@@ -29,7 +27,6 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: "general", label: "General" },
   { id: "security", label: "Security" },
-  { id: "machine", label: "Machine", desktopOnly: true },
   { id: "projects", label: "Projects" },
   { id: "organization", label: "Organization" },
   { id: "billing", label: "Billing", adminOnly: true },
@@ -83,7 +80,6 @@ export function SettingsPane({ onClose, initialSection = "general" }: Props) {
     switch (activeSection) {
       case "general": return <GeneralSection />;
       case "security": return <SecuritySection />;
-      case "machine": return <MachineSection />;
       case "projects": return <ProjectsSection />;
       case "organization": return <OrganizationSection />;
       case "billing": return <BillingSection />;

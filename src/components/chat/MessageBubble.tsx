@@ -60,6 +60,11 @@ export function MessageBubble({ message }: Props) {
           {!isMe && message.senderName && (
             <span className="font-medium mr-1">{message.senderName}</span>
           )}
+          {message.executionMode === "plan" && (
+            <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/15 text-amber-600 font-medium mr-1">
+              PLAN
+            </span>
+          )}
           {formatTime(message.timestamp)}
           {isMe && (
             <span className="ml-1">

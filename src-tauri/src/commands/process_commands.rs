@@ -4,11 +4,42 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use crate::state::AppState;
 use crate::error::JaibberError;
 
-/// Spawns `claude --print "$JAIBBER_PROMPT"` via bash -c so that the user's
-/// full shell environment (nvm, PATH, etc.) is available. Prompt is passed via
-/// env var to avoid shell escaping issues with quotes and special characters.
+/// Build the shell preamble that sources the user's environment (nvm, bashrc, etc.)
+/// and sets up PATH. Reusable across agent providers.
+fn build_shell_env() -> String {
+    r#"export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc" 2>/dev/null
+[ -f "$HOME/.profile" ] && . "$HOME/.profile" 2>/dev/null
+[ -f "$HOME/.zshrc" ] && . "$HOME/.zshrc" 2>/dev/null
+export PATH="$PATH:/usr/local/bin:/usr/bin"
+# Windows: add Claude Code install dir (version-agnostic glob)
+for _d in "$HOME/AppData/Roaming/Claude/claude-code"/*/; do
+  [ -d "$_d" ] && export PATH="$PATH:$_d"
+done"#.to_string()
+}
+
+/// Build the Claude CLI command for one-shot (non-streaming) execution.
+fn build_claude_oneshot_cmd() -> String {
+    format!("{}\nclaude --print --dangerously-skip-permissions \"$JAIBBER_PROMPT\"",
+        build_shell_env())
+}
+
+/// Build the Claude CLI command for streaming execution with stream-json output.
+fn build_claude_stream_cmd(has_system_prompt: bool) -> String {
+    let env = build_shell_env();
+    if has_system_prompt {
+        format!("{}\nclaude --print --verbose --output-format stream-json --append-system-prompt \"$JAIBBER_SYSTEM\" --dangerously-skip-permissions \"$JAIBBER_PROMPT\"", env)
+    } else {
+        format!("{}\nclaude --print --verbose --output-format stream-json --dangerously-skip-permissions \"$JAIBBER_PROMPT\"", env)
+    }
+}
+
+/// Spawns an agent process via bash -c so that the user's full shell environment
+/// (nvm, PATH, etc.) is available. Prompt is passed via env var to avoid shell
+/// escaping issues with quotes and special characters.
 #[tauri::command]
-pub async fn run_claude(
+pub async fn run_agent(
     prompt: String,
     project_dir: String,
     state: State<'_, Arc<AppState>>,
@@ -22,22 +53,11 @@ pub async fn run_claude(
         return Err(JaibberError::Other("project_dir must not be empty".into()));
     }
 
-    // Pass prompt via env var to avoid all shell escaping issues.
-    let bash_cmd = r#"export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc" 2>/dev/null
-[ -f "$HOME/.profile" ] && . "$HOME/.profile" 2>/dev/null
-[ -f "$HOME/.zshrc" ] && . "$HOME/.zshrc" 2>/dev/null
-export PATH="$PATH:/usr/local/bin:/usr/bin"
-# Windows: add Claude Code install dir (version-agnostic glob)
-for _d in "$HOME/AppData/Roaming/Claude/claude-code"/*/; do
-  [ -d "$_d" ] && export PATH="$PATH:$_d"
-done
-claude --print --dangerously-skip-permissions "$JAIBBER_PROMPT""#;
+    let bash_cmd = build_claude_oneshot_cmd();
 
     let mut cmd = tokio::process::Command::new("bash");
     cmd.arg("-c")
-       .arg(bash_cmd)
+       .arg(&bash_cmd)
        .current_dir(&project_dir)
        .env("JAIBBER_PROMPT", &prompt)
        .stdout(std::process::Stdio::piped())
@@ -60,20 +80,21 @@ claude --print --dangerously-skip-permissions "$JAIBBER_PROMPT""#;
     } else {
         if stderr.contains("command not found") || stderr.contains("not recognized") {
             return Err(JaibberError::Shell(
-                "Claude Code is not installed or not on PATH.\n\
+                "Agent CLI (Claude Code) is not installed or not on PATH.\n\
                 Install it with: npm install -g @anthropic-ai/claude-code\n\
                 Then restart Jaibber.".into()
             ));
         }
         let code = output.status.code().map(|c| c.to_string()).unwrap_or_else(|| "?".to_string());
         Err(JaibberError::Shell(format!(
-            "claude exited with code {code}\nstderr: {stderr}\nstdout: {stdout}"
+            "Agent process exited with code {code}\nstderr: {stderr}\nstdout: {stdout}"
         )))
     }
 }
 
-/// Extract text content from a stream-json event line.
-/// Handles various JSON structures emitted by `claude --output-format stream-json`.
+/// Extract text content from a Claude stream-json event line.
+/// This parser is specific to Claude Code's `--output-format stream-json`.
+/// A future agent provider would need its own parser.
 fn extract_text_from_event(json: &serde_json::Value) -> String {
     // Partial content block delta: {"type":"content_block_delta","delta":{"type":"text_delta","text":"..."}}
     if let Some(delta) = json.get("delta") {
@@ -101,7 +122,7 @@ fn extract_text_from_event(json: &serde_json::Value) -> String {
     String::new()
 }
 
-/// Streaming variant of `run_claude`. Spawns a CLI agent process and streams
+/// Streaming variant of `run_agent`. Spawns a CLI agent process and streams
 /// its stdout as Tauri events. Parses JSON lines (stream-json) for text
 /// extraction, falling back to raw text for non-JSON output.
 ///
@@ -112,7 +133,7 @@ fn extract_text_from_event(json: &serde_json::Value) -> String {
 /// System prompt is passed via `--append-system-prompt`. Conversation context
 /// is included in the main prompt.
 #[tauri::command]
-pub async fn run_claude_stream(
+pub async fn run_agent_stream(
     prompt: String,
     project_dir: String,
     response_id: String,
@@ -142,31 +163,7 @@ pub async fn run_claude_stream(
     }
     full_prompt.push_str(&prompt);
 
-    // Pass prompt and system prompt via env vars to avoid all shell escaping issues.
-    // Double-quoted "$VAR" in bash expands without further interpretation.
-    let bash_cmd = if system_prompt.is_empty() {
-        r#"export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc" 2>/dev/null
-[ -f "$HOME/.profile" ] && . "$HOME/.profile" 2>/dev/null
-[ -f "$HOME/.zshrc" ] && . "$HOME/.zshrc" 2>/dev/null
-export PATH="$PATH:/usr/local/bin:/usr/bin"
-for _d in "$HOME/AppData/Roaming/Claude/claude-code"/*/; do
-  [ -d "$_d" ] && export PATH="$PATH:$_d"
-done
-claude --print --verbose --output-format stream-json --dangerously-skip-permissions "$JAIBBER_PROMPT""#.to_string()
-    } else {
-        r#"export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc" 2>/dev/null
-[ -f "$HOME/.profile" ] && . "$HOME/.profile" 2>/dev/null
-[ -f "$HOME/.zshrc" ] && . "$HOME/.zshrc" 2>/dev/null
-export PATH="$PATH:/usr/local/bin:/usr/bin"
-for _d in "$HOME/AppData/Roaming/Claude/claude-code"/*/; do
-  [ -d "$_d" ] && export PATH="$PATH:$_d"
-done
-claude --print --verbose --output-format stream-json --append-system-prompt "$JAIBBER_SYSTEM" --dangerously-skip-permissions "$JAIBBER_PROMPT""#.to_string()
-    };
+    let bash_cmd = build_claude_stream_cmd(!system_prompt.is_empty());
 
     let mut cmd = tokio::process::Command::new("bash");
     cmd.arg("-c")
@@ -230,7 +227,7 @@ claude --print --verbose --output-format stream-json --append-system-prompt "$JA
                         let text = extract_text_from_event(&json);
                         if !text.is_empty() {
                             got_output = true;
-                            let _ = win.emit("claude-chunk", serde_json::json!({
+                            let _ = win.emit("agent-chunk", serde_json::json!({
                                 "responseId": rid,
                                 "chunk": text,
                                 "done": false,
@@ -240,7 +237,7 @@ claude --print --verbose --output-format stream-json --append-system-prompt "$JA
                     } else if !line.trim().is_empty() {
                         // Non-JSON line — emit as raw text (fallback)
                         got_output = true;
-                        let _ = win.emit("claude-chunk", serde_json::json!({
+                        let _ = win.emit("agent-chunk", serde_json::json!({
                             "responseId": rid,
                             "chunk": format!("{}\n", line),
                             "done": false,
@@ -257,7 +254,7 @@ claude --print --verbose --output-format stream-json --append-system-prompt "$JA
                         // Agent produced output but process didn't exit —
                         // treat as successful completion (e.g. agent spawned
                         // a long-running subprocess like a dev server).
-                        let _ = win.emit("claude-chunk", serde_json::json!({
+                        let _ = win.emit("agent-chunk", serde_json::json!({
                             "responseId": rid,
                             "chunk": "",
                             "done": true,
@@ -265,7 +262,7 @@ claude --print --verbose --output-format stream-json --append-system-prompt "$JA
                         }));
                     } else {
                         // No output at all — genuine timeout
-                        let _ = win.emit("claude-chunk", serde_json::json!({
+                        let _ = win.emit("agent-chunk", serde_json::json!({
                             "responseId": rid,
                             "chunk": "",
                             "done": false,
@@ -287,7 +284,7 @@ claude --print --verbose --output-format stream-json --append-system-prompt "$JA
         match timeout(Duration::from_secs(30), child.wait()).await {
             Ok(Ok(status)) => {
                 if status.success() || got_output {
-                    let _ = win.emit("claude-chunk", serde_json::json!({
+                    let _ = win.emit("agent-chunk", serde_json::json!({
                         "responseId": rid,
                         "chunk": "",
                         "done": true,
@@ -296,11 +293,11 @@ claude --print --verbose --output-format stream-json --append-system-prompt "$JA
                 } else {
                     let code = status.code().map(|c| c.to_string()).unwrap_or_else(|| "?".into());
                     let err_detail = if stderr_text.trim().is_empty() {
-                        format!("claude exited with code {code}")
+                        format!("Agent process exited with code {code}")
                     } else {
-                        format!("claude exited with code {code}\n{}", stderr_text.trim())
+                        format!("Agent process exited with code {code}\n{}", stderr_text.trim())
                     };
-                    let _ = win.emit("claude-chunk", serde_json::json!({
+                    let _ = win.emit("agent-chunk", serde_json::json!({
                         "responseId": rid,
                         "chunk": "",
                         "done": false,
@@ -312,14 +309,14 @@ claude --print --verbose --output-format stream-json --append-system-prompt "$JA
                 // wait() timed out or errored — force kill
                 let _ = child.kill().await;
                 if got_output {
-                    let _ = win.emit("claude-chunk", serde_json::json!({
+                    let _ = win.emit("agent-chunk", serde_json::json!({
                         "responseId": rid,
                         "chunk": "",
                         "done": true,
                         "error": null,
                     }));
                 } else {
-                    let _ = win.emit("claude-chunk", serde_json::json!({
+                    let _ = win.emit("agent-chunk", serde_json::json!({
                         "responseId": rid,
                         "chunk": "",
                         "done": false,

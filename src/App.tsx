@@ -119,6 +119,7 @@ function App({ onRequireLogin }: AppProps = {}) {
             ...p,
             agentName: p.agentName || machineName,
             agentInstructions: p.agentInstructions ?? "",
+            agentProvider: p.agentProvider ?? "claude",
           }));
           useProjectStore.getState().setProjects(migrated);
         }

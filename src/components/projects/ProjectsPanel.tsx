@@ -174,6 +174,7 @@ function ProjectCard({ contact }: { contact: Contact }) {
       ablyChannelName: contact.ablyChannelName,
       agentName: linkAgentName.trim() || defaultAgentName,
       agentInstructions: linkAgentInstructions.trim(),
+      agentProvider: "claude",
     };
     useProjectStore.getState().addProject(lp);
     saveProjects(useProjectStore.getState().projects);
@@ -644,6 +645,7 @@ export function ProjectsPanel() {
           ablyChannelName: p.ablyChannelName,
           agentName: newAgentName.trim() || defaultAgentName,
           agentInstructions: newAgentInstructions.trim(),
+          agentProvider: "claude",
         };
         useProjectStore.getState().addProject(newLocal);
         saveProjects(useProjectStore.getState().projects);
@@ -678,8 +680,8 @@ export function ProjectsPanel() {
       <h2 className="text-sm font-semibold text-foreground">Projects</h2>
       <p className="text-xs text-muted-foreground">
         {isTauri
-          ? "All projects you belong to. Projects registered on this machine will run Claude as an agent."
-          : "All projects you belong to. To run a Claude agent, register the project on the desktop app."}
+          ? "All projects you belong to. Projects registered on this machine will run an AI agent."
+          : "All projects you belong to. To run an agent, register the project on the desktop app."}
       </p>
 
       {/* All projects list */}

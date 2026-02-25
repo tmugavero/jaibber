@@ -1,3 +1,5 @@
+export type ExecutionMode = "auto" | "plan";
+
 export interface Message {
   id: string;
   conversationId: string;  // projectId UUID
@@ -6,6 +8,7 @@ export interface Message {
   text: string;
   timestamp: string;
   status: "sending" | "sent" | "streaming" | "done" | "error";
+  executionMode?: ExecutionMode;  // "auto" or "plan" — affects agent behavior
 }
 
 export interface AblyMessage {
@@ -18,6 +21,7 @@ export interface AblyMessage {
   responseId?: string;    // sent in "typing" so receivers can pre-create bubble with correct ID
   agentName?: string;     // set on agent messages (typing/response/chunk/error)
   mentions?: string[];    // parsed @mention targets from user messages
+  executionMode?: ExecutionMode;  // sent with "message" type so agent knows which mode to use
   // Agent-to-agent loop prevention
   isAgentMessage?: boolean;     // true if this message was sent by an agent (not a human)
   responseDepth?: number;       // 0 for human messages, +1 for each agent response in a chain
