@@ -156,7 +156,11 @@ pub async fn run_agent_stream(
     if !conversation_context.is_empty() {
         full_prompt.push_str(
             "Below is the recent conversation history for context. \
-             Respond ONLY to the final user message.\n\n"
+             Respond ONLY to the final user message. \
+             Be conversational and concise — reply directly to the user as a chat participant. \
+             Do NOT narrate your thought process, planning steps, or internal reasoning. \
+             Do NOT describe actions you would take (e.g. \"I should...\", \"Let me...\", \"I will...\"). \
+             Just answer.\n\n"
         );
         full_prompt.push_str(&conversation_context);
         full_prompt.push_str("\n\n---\n\n");
