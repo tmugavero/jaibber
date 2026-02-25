@@ -5,8 +5,13 @@ export function GeneralSection() {
   const username = useAuthStore((s) => s.username);
 
   const handleSignOut = async () => {
-    await storage.delete("auth");
     useAuthStore.getState().clearAuth();
+    // Overwrite persisted auth (more reliable than delete on Tauri store)
+    // Timeout ensures we always reload even if the store hangs
+    await Promise.race([
+      storage.set("auth", null).catch(() => {}),
+      new Promise((r) => setTimeout(r, 1000)),
+    ]);
     window.location.reload();
   };
 
