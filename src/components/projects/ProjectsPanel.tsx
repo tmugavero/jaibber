@@ -6,6 +6,7 @@ import { useChatStore } from "@/stores/chatStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useOrgStore } from "@/stores/orgStore";
+import { getAbly } from "@/lib/ably";
 import type { LocalProject } from "@/stores/projectStore";
 import type { Contact } from "@/types/contact";
 
@@ -511,12 +512,15 @@ function ProjectCard({ contact }: { contact: Contact }) {
 
 export function ProjectsPanel() {
   const contacts = useContactStore((s) => s.contacts);
+  const orgs = useOrgStore((s) => s.orgs);
+  const activeOrgId = useOrgStore((s) => s.activeOrgId);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // "Create new project on server" form
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectDescription, setNewProjectDescription] = useState("");
+  const [selectedOrgId, setSelectedOrgId] = useState<string>(activeOrgId ?? "");
   const [newProjectDir, setNewProjectDir] = useState("");
   const [newAgentName, setNewAgentName] = useState("");
   const [newAgentInstructions, setNewAgentInstructions] = useState("");
@@ -541,11 +545,11 @@ export function ProjectsPanel() {
     setBusy(true);
     setError(null);
     try {
-      const activeOrgId = useOrgStore.getState().activeOrgId;
+      const orgId = selectedOrgId || undefined;
       const res = await fetch(`${apiBaseUrl}/api/projects`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: newProjectName.trim(), description: newProjectDescription.trim() || undefined, orgId: activeOrgId || undefined }),
+        body: JSON.stringify({ name: newProjectName.trim(), description: newProjectDescription.trim() || undefined, orgId }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Failed to create project."); return; }
@@ -577,8 +581,17 @@ export function ProjectsPanel() {
         saveProjects(useProjectStore.getState().projects);
       }
 
+      // Notify other org members to refresh their project list
+      if (orgId) {
+        const ably = getAbly();
+        if (ably) {
+          ably.channels.get("jaibber:presence").publish("refresh-projects", { orgId });
+        }
+      }
+
       setNewProjectName("");
       setNewProjectDescription("");
+      setSelectedOrgId(activeOrgId ?? "");
       setNewProjectDir("");
       setNewAgentName("");
       setNewAgentInstructions("");
@@ -627,6 +640,18 @@ export function ProjectsPanel() {
             placeholder="Project name, e.g. My Frontend App"
             className={inputClass}
           />
+          {orgs.length > 0 && (
+            <select
+              value={selectedOrgId}
+              onChange={(e) => setSelectedOrgId(e.target.value)}
+              className={inputClass}
+            >
+              <option value="">Personal (no organization)</option>
+              {orgs.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+            </select>
+          )}
           <input
             type="text"
             value={newProjectDescription}

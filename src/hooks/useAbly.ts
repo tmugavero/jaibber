@@ -203,15 +203,6 @@ function subscribeToProjectChannel(
   const localProject = useProjectStore.getState().projects.find(
     (p) => p.projectId === contact.id
   );
-  channel.presence.enter({
-    userId,
-    username,
-    isAgent: !!localProject,
-    agentName: localProject?.agentName || undefined,
-    agentInstructions: localProject?.agentInstructions || undefined,
-    machineName: localProject ? useSettingsStore.getState().settings.machineName : undefined,
-  });
-
   const isOwnConnection = (member: { connectionId?: string }) =>
     member.connectionId != null && member.connectionId === ably.connection.id;
 
@@ -233,6 +224,16 @@ function subscribeToProjectChannel(
     }).catch(() => {});
   };
 
+  // Enter presence, then run initial sync once enter completes
+  channel.presence.enter({
+    userId,
+    username,
+    isAgent: !!localProject,
+    agentName: localProject?.agentName || undefined,
+    agentInstructions: localProject?.agentInstructions || undefined,
+    machineName: localProject ? useSettingsStore.getState().settings.machineName : undefined,
+  }).then(() => syncAgents()).catch(() => {});
+
   channel.presence.subscribe("enter", (member) => {
     if (!isAgentMember(member)) return;
     syncAgents();
@@ -246,8 +247,6 @@ function subscribeToProjectChannel(
   channel.presence.subscribe("leave", () => {
     syncAgents();
   });
-
-  syncAgents();
 
   // Subscribe to messages on this project channel
   channel.subscribe(async (msg) => {
@@ -378,6 +377,15 @@ export function useAbly() {
         projectIds: localProjects.map((p) => p.projectId),
       });
 
+      // Listen for refresh-projects signals from other clients (e.g. when a new org project is created)
+      presenceChannel.subscribe("refresh-projects", () => {
+        const { token: t } = useAuthStore.getState();
+        const { apiBaseUrl: url } = useSettingsStore.getState().settings;
+        if (t && url) {
+          useContactStore.getState().loadFromServer(url, t);
+        }
+      });
+
       for (const contact of Object.values(contacts)) {
         ensureChannelSubscribed(contact);
       }
@@ -407,10 +415,24 @@ export function useAbly() {
       if (!initializedRef.current) tryInit();
     });
     const unsubContacts = useContactStore.subscribe(handleContactsChange);
+    const unsubProjects = useProjectStore.subscribe(() => {
+      const ably = ablyRef.current;
+      if (!ably) return;
+      const { userId: uid, username: uname } = useAuthStore.getState();
+      if (!uid || !uname) return;
+      const lps = useProjectStore.getState().projects;
+      const pc = ably.channels.get("jaibber:presence");
+      pc.presence.update({
+        userId: uid,
+        username: uname,
+        projectIds: lps.map((p) => p.projectId),
+      });
+    });
 
     return () => {
       unsubAuth();
       unsubContacts();
+      unsubProjects();
       cleanupRef.current?.();
       initializedRef.current = false;
       ablyRef.current = null;
