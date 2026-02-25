@@ -5,6 +5,7 @@ import { useContactStore } from "@/stores/contactStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useOrgStore } from "@/stores/orgStore";
 import type { LocalProject } from "@/stores/projectStore";
 import type { Contact } from "@/types/contact";
 
@@ -176,6 +177,43 @@ function ProjectCard({ contact }: { contact: Contact }) {
   const handleUnlink = () => {
     useProjectStore.getState().removeProject(contact.id);
     saveProjects(useProjectStore.getState().projects.filter((x) => x.projectId !== contact.id));
+  };
+
+  const handleLeaveProject = async () => {
+    if (!confirm("Leave this project? You will need to be re-invited to rejoin.")) return;
+    const { token } = useAuthStore.getState();
+    const { userId } = useAuthStore.getState();
+    const { apiBaseUrl } = useSettingsStore.getState().settings;
+    if (!token || !apiBaseUrl || !userId) return;
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/projects/${contact.id}/members/${userId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        useContactStore.getState().removeContact(contact.id);
+        useProjectStore.getState().removeProject(contact.id);
+        saveProjects(useProjectStore.getState().projects.filter((x) => x.projectId !== contact.id));
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!confirm("Delete this project? This will remove it for ALL members and cannot be undone.")) return;
+    const { token } = useAuthStore.getState();
+    const { apiBaseUrl } = useSettingsStore.getState().settings;
+    if (!token || !apiBaseUrl) return;
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/projects/${contact.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        useContactStore.getState().removeContact(contact.id);
+        useProjectStore.getState().removeProject(contact.id);
+        saveProjects(useProjectStore.getState().projects.filter((x) => x.projectId !== contact.id));
+      }
+    } catch { /* ignore */ }
   };
 
   const inputClass = "w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50";
@@ -449,6 +487,24 @@ function ProjectCard({ contact }: { contact: Contact }) {
           </div>
         </div>
       )}
+
+      {/* Leave / Delete project */}
+      <div className="border-t border-border/50 px-3 py-2 flex gap-3">
+        <button
+          onClick={handleLeaveProject}
+          className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+        >
+          Leave project
+        </button>
+        {isAdmin && (
+          <button
+            onClick={handleDeleteProject}
+            className="text-[11px] text-destructive/60 hover:text-destructive transition-colors"
+          >
+            Delete project
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -485,10 +541,11 @@ export function ProjectsPanel() {
     setBusy(true);
     setError(null);
     try {
+      const activeOrgId = useOrgStore.getState().activeOrgId;
       const res = await fetch(`${apiBaseUrl}/api/projects`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: newProjectName.trim(), description: newProjectDescription.trim() || undefined }),
+        body: JSON.stringify({ name: newProjectName.trim(), description: newProjectDescription.trim() || undefined, orgId: activeOrgId || undefined }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Failed to create project."); return; }

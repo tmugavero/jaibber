@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { useChatStore } from "@/stores/chatStore";
 import { useContactStore } from "@/stores/contactStore";
+import { useAuthStore } from "@/stores/authStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { MessageBubble } from "./MessageBubble";
 import { MessageInput } from "./MessageInput";
 import { sendMessage } from "@/hooks/useAbly";
+
+interface ProjectMember {
+  userId: string;
+  username: string;
+  role: string;
+}
 
 interface Props {
   contactId: string;
@@ -17,12 +25,72 @@ export function ChatWindow({ contactId, onBack }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [showInfo, setShowInfo] = useState(false);
 
+  // Project members state
+  const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+  const [addUsername, setAddUsername] = useState("");
+  const [addingMember, setAddingMember] = useState(false);
+  const [addMemberMsg, setAddMemberMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
   const msgCount = messages?.length ?? 0;
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgCount]);
+
+  // Load project members when info panel opens
+  useEffect(() => {
+    if (showInfo) loadProjectMembers();
+  }, [showInfo, contactId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadProjectMembers = async () => {
+    const { token } = useAuthStore.getState();
+    const { apiBaseUrl } = useSettingsStore.getState().settings;
+    if (!token || !apiBaseUrl) return;
+    setLoadingMembers(true);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/projects/${contactId}/members`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setProjectMembers(data.members ?? []);
+      }
+    } catch { /* ignore */ } finally {
+      setLoadingMembers(false);
+    }
+  };
+
+  const handleAddMember = async () => {
+    const trimmed = addUsername.trim();
+    if (!trimmed) return;
+    const { token } = useAuthStore.getState();
+    const { apiBaseUrl } = useSettingsStore.getState().settings;
+    if (!token || !apiBaseUrl) return;
+    setAddingMember(true);
+    setAddMemberMsg(null);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/projects/${contactId}/members`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ username: trimmed }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAddMemberMsg({ type: "error", text: data.error ?? "Failed to add member." });
+        return;
+      }
+      setAddMemberMsg({ type: "success", text: `Added ${data.member.username}` });
+      setAddUsername("");
+      await loadProjectMembers();
+      setTimeout(() => setAddMemberMsg(null), 3000);
+    } catch (e) {
+      setAddMemberMsg({ type: "error", text: `Network error: ${e}` });
+    } finally {
+      setAddingMember(false);
+    }
+  };
 
   const handleSend = (text: string) => {
     sendMessage(contactId, text);
@@ -33,6 +101,7 @@ export function ChatWindow({ contactId, onBack }: Props) {
   ) ?? false;
 
   const agents = contact?.onlineAgents ?? [];
+  const isAdmin = contact?.role === "admin";
 
   return (
     <div className="flex flex-col h-full">
@@ -140,6 +209,66 @@ export function ChatWindow({ contactId, onBack }: Props) {
                       )}
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+
+            {/* Project members */}
+            <div>
+              <div className="text-xs font-medium text-muted-foreground mb-1.5">
+                Members {!loadingMembers && projectMembers.length > 0 && `(${projectMembers.length})`}
+              </div>
+              {loadingMembers ? (
+                <div className="text-xs text-muted-foreground animate-pulse">Loading...</div>
+              ) : projectMembers.length > 0 ? (
+                <div className="space-y-1">
+                  {projectMembers.map((m) => (
+                    <div key={m.userId} className="flex items-center gap-1.5 text-xs">
+                      <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-[9px] font-semibold text-primary flex-shrink-0">
+                        {m.username.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-foreground font-medium">{m.username}</span>
+                      <span className={`text-[9px] px-1 py-0.5 rounded-full ${
+                        m.role === "admin"
+                          ? "bg-primary/10 text-primary"
+                          : "bg-muted text-muted-foreground"
+                      }`}>
+                        {m.role}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground italic">No members loaded.</div>
+              )}
+
+              {/* Add member form — admin only */}
+              {isAdmin && (
+                <div className="mt-2">
+                  <div className="flex gap-1.5 items-center">
+                    <input
+                      type="text"
+                      value={addUsername}
+                      onChange={(e) => setAddUsername(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleAddMember(); }}
+                      placeholder="Add by username..."
+                      className="flex-1 bg-muted/40 border border-input rounded-md px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+                    />
+                    <button
+                      onClick={handleAddMember}
+                      disabled={addingMember || !addUsername.trim()}
+                      className="bg-primary text-primary-foreground rounded-md px-2.5 py-1 text-xs font-medium hover:bg-primary/90 transition-all disabled:opacity-50"
+                    >
+                      {addingMember ? "..." : "Add"}
+                    </button>
+                  </div>
+                  {addMemberMsg && (
+                    <p className={`text-[10px] mt-1 ${
+                      addMemberMsg.type === "success" ? "text-emerald-500" : "text-destructive"
+                    }`}>
+                      {addMemberMsg.text}
+                    </p>
+                  )}
                 </div>
               )}
             </div>

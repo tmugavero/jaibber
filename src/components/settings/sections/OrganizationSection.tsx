@@ -12,8 +12,16 @@ interface OrgInvite {
   useCount: number;
 }
 
+interface OrgMember {
+  userId: string;
+  username: string;
+  role: string;
+  addedAt: string;
+}
+
 export function OrganizationSection() {
   const token = useAuthStore((s) => s.token);
+  const userId = useAuthStore((s) => s.userId);
   const { apiBaseUrl } = useSettingsStore((s) => s.settings);
   const activeOrg = useOrgStore((s) => s.orgs.find((o) => o.id === s.activeOrgId));
   const isOrgAdmin = activeOrg && (activeOrg.role === "owner" || activeOrg.role === "admin");
@@ -22,6 +30,10 @@ export function OrganizationSection() {
   const [orgName, setOrgName] = useState("");
   const [creatingOrg, setCreatingOrg] = useState(false);
   const [orgError, setOrgError] = useState<string | null>(null);
+
+  // Members list
+  const [members, setMembers] = useState<OrgMember[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
 
   // Add member by username
   const [inviteUsername, setInviteUsername] = useState("");
@@ -39,10 +51,29 @@ export function OrganizationSection() {
   const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
 
-  // Load invites when org is active
+  // Load members and invites when org is active
   useEffect(() => {
-    if (activeOrg && isOrgAdmin) loadInvites();
+    if (activeOrg) {
+      loadMembers();
+      if (isOrgAdmin) loadInvites();
+    }
   }, [activeOrg?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadMembers = async () => {
+    if (!activeOrg || !apiBaseUrl || !token) return;
+    setLoadingMembers(true);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/orgs/${activeOrg.id}/members`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMembers(data.members ?? []);
+      }
+    } catch { /* ignore */ } finally {
+      setLoadingMembers(false);
+    }
+  };
 
   const loadInvites = async () => {
     if (!activeOrg || !apiBaseUrl || !token) return;
@@ -93,12 +124,26 @@ export function OrganizationSection() {
       if (!res.ok) { setMemberError(data.error ?? "Failed to add member."); return; }
       setMemberSuccess(`Added ${data.member.username} as ${data.member.role}`);
       setInviteUsername("");
+      await loadMembers();
       setTimeout(() => setMemberSuccess(null), 3000);
     } catch (e) {
       setMemberError(`Network error: ${e}`);
     } finally {
       setAddingMember(false);
     }
+  };
+
+  const handleRemoveMember = async (targetUserId: string) => {
+    if (!activeOrg || !apiBaseUrl || !token) return;
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/orgs/${activeOrg.id}/members/${targetUserId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setMembers((prev) => prev.filter((m) => m.userId !== targetUserId));
+      }
+    } catch { /* ignore */ }
   };
 
   const handleGenerateInvite = async () => {
@@ -178,10 +223,54 @@ export function OrganizationSection() {
             </div>
           </div>
 
+          {/* Members list — visible to all org members */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-foreground">
+              Members {!loadingMembers && members.length > 0 && `(${members.length})`}
+            </h3>
+            {loadingMembers ? (
+              <p className="text-xs text-muted-foreground animate-pulse">Loading members...</p>
+            ) : members.length > 0 ? (
+              <div className="space-y-1.5 max-w-md">
+                {members.map((m) => (
+                  <div key={m.userId} className="flex items-center gap-2 text-sm">
+                    <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-semibold text-primary flex-shrink-0">
+                      {m.username.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-foreground font-medium flex-1 min-w-0 truncate">{m.username}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                      m.role === "owner"
+                        ? "bg-amber-500/10 text-amber-500"
+                        : m.role === "admin"
+                          ? "bg-primary/10 text-primary"
+                          : "bg-muted text-muted-foreground"
+                    }`}>
+                      {m.role}
+                    </span>
+                    {isOrgAdmin && m.userId !== userId && m.role !== "owner" && (
+                      <button
+                        onClick={() => {
+                          if (confirm(`Remove ${m.username} from the organization?`)) {
+                            handleRemoveMember(m.userId);
+                          }
+                        }}
+                        className="text-[10px] text-destructive/60 hover:text-destructive transition-colors flex-shrink-0"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">No members found.</p>
+            )}
+          </div>
+
           {isOrgAdmin && (
             <>
               {/* Add member by username */}
-              <div className="space-y-3">
+              <div className="space-y-3 border-t border-border pt-6">
                 <h3 className="text-sm font-medium text-foreground">Add member by username</h3>
                 <div className="flex gap-2 items-end max-w-md">
                   <div className="flex-1">
