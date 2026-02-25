@@ -4,6 +4,7 @@ import { AppPage } from "@/pages/AppPage";
 import { LandingPage } from "@/pages/LandingPage";
 import { PricingPage } from "@/pages/PricingPage";
 import { InvitePage } from "@/pages/InvitePage";
+import { ProjectInvitePage } from "@/pages/ProjectInvitePage";
 import "./App.css";
 
 export default function WebRouter() {
@@ -15,6 +16,7 @@ export default function WebRouter() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/app" element={<AppPage />} />
         <Route path="/invite/:token" element={<InvitePage />} />
+        <Route path="/join/project/:token" element={<ProjectInvitePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

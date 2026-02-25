@@ -18,6 +18,15 @@ function formatDate(iso: string | null): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+interface ProjectInvite {
+  id: string;
+  token: string;
+  role: string;
+  expiresAt: string | null;
+  maxUses: number | null;
+  useCount: number;
+}
+
 function ProjectCard({ contact }: { contact: Contact }) {
   const localProjects = useProjectStore((s) => s.projects);
   const messages = useChatStore((s) => s.messages[contact.id]);
@@ -36,7 +45,97 @@ function ProjectCard({ contact }: { contact: Contact }) {
   const [linkAgentName, setLinkAgentName] = useState("");
   const [linkAgentInstructions, setLinkAgentInstructions] = useState("");
 
+  // Invite link state
+  const [showInvites, setShowInvites] = useState(false);
+  const [invites, setInvites] = useState<ProjectInvite[]>([]);
+  const [inviteRole, setInviteRole] = useState<"member" | "admin">("member");
+  const [generatingInvite, setGeneratingInvite] = useState(false);
+  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [loadingInvites, setLoadingInvites] = useState(false);
+
   const defaultAgentName = useSettingsStore.getState().settings.machineName || "Agent";
+  const isAdmin = contact.role === "admin";
+
+  const getAuthHeaders = () => {
+    const { token } = useAuthStore.getState();
+    const { apiBaseUrl } = useSettingsStore.getState().settings;
+    return { token, apiBaseUrl };
+  };
+
+  const loadInvites = async () => {
+    const { token, apiBaseUrl } = getAuthHeaders();
+    if (!token || !apiBaseUrl) return;
+    setLoadingInvites(true);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/projects/${contact.id}/invites`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setInvites(data.invites ?? []);
+      }
+    } catch { /* ignore */ } finally {
+      setLoadingInvites(false);
+    }
+  };
+
+  const handleToggleInvites = () => {
+    if (!showInvites) loadInvites();
+    setShowInvites(!showInvites);
+    setInviteError(null);
+  };
+
+  const handleGenerateInvite = async () => {
+    const { token, apiBaseUrl } = getAuthHeaders();
+    if (!token || !apiBaseUrl) return;
+    setGeneratingInvite(true);
+    setInviteError(null);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/projects/${contact.id}/invites`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ role: inviteRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setInviteError(data.error ?? "Failed to generate invite."); return; }
+      await loadInvites();
+    } catch (e) {
+      setInviteError(`Network error: ${e}`);
+    } finally {
+      setGeneratingInvite(false);
+    }
+  };
+
+  const handleRevokeInvite = async (inviteId: string) => {
+    const { token, apiBaseUrl } = getAuthHeaders();
+    if (!token || !apiBaseUrl) return;
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/projects/${contact.id}/invites/${inviteId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setInvites((prev) => prev.filter((i) => i.id !== inviteId));
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleCopyInvite = async (invite: ProjectInvite) => {
+    const url = `${window.location.origin}/join/project/${invite.token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      const input = document.createElement("input");
+      input.value = url;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+    }
+    setCopiedInviteId(invite.id);
+    setTimeout(() => setCopiedInviteId(null), 2000);
+  };
 
   const handleStartEdit = () => {
     setEditAgentName(localProject?.agentName || "");
@@ -142,6 +241,95 @@ function ProjectCard({ contact }: { contact: Contact }) {
           </div>
         )}
       </div>
+
+      {/* Invite links — admin only */}
+      {isAdmin && (
+        <div className="border-t border-border/50 px-3 py-2">
+          <button
+            onClick={handleToggleInvites}
+            className="text-[11px] text-primary/70 hover:text-primary transition-colors"
+          >
+            {showInvites ? "- Hide invite links" : "+ Invite members"}
+          </button>
+
+          {showInvites && (
+            <div className="mt-2 space-y-2">
+              {/* Generate new invite */}
+              <div className="flex gap-2 items-end">
+                <div className="flex-1">
+                  <label className="block text-[10px] text-muted-foreground mb-0.5">Role</label>
+                  <select
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value as "member" | "admin")}
+                    className={inputClass + " text-xs py-1"}
+                  >
+                    <option value="member">Member</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+                <button
+                  onClick={handleGenerateInvite}
+                  disabled={generatingInvite}
+                  className="bg-primary text-primary-foreground rounded-lg px-3 py-1.5 text-[11px] font-medium hover:bg-primary/90 transition-all disabled:opacity-50"
+                >
+                  {generatingInvite ? "..." : "Generate Link"}
+                </button>
+              </div>
+
+              {inviteError && (
+                <p className="text-[10px] text-destructive">{inviteError}</p>
+              )}
+
+              {/* Active invites list */}
+              {loadingInvites ? (
+                <p className="text-[10px] text-muted-foreground animate-pulse">Loading...</p>
+              ) : invites.length > 0 ? (
+                <div className="space-y-1">
+                  <p className="text-[10px] text-muted-foreground font-medium">Active invite links</p>
+                  {invites.map((inv) => {
+                    const expired = inv.expiresAt ? new Date(inv.expiresAt) < new Date() : false;
+                    const exhausted = inv.maxUses ? inv.useCount >= inv.maxUses : false;
+                    const isInvalid = expired || exhausted;
+                    return (
+                      <div
+                        key={inv.id}
+                        className={`flex items-center gap-1.5 text-[10px] ${isInvalid ? "opacity-50" : ""}`}
+                      >
+                        <span className="text-muted-foreground capitalize flex-shrink-0">{inv.role}</span>
+                        <span className="text-muted-foreground">·</span>
+                        <span className="text-muted-foreground">
+                          {inv.useCount} use{inv.useCount !== 1 ? "s" : ""}
+                          {inv.maxUses != null && ` / ${inv.maxUses}`}
+                        </span>
+                        {isInvalid && (
+                          <span className="text-destructive/70 flex-shrink-0">
+                            {expired ? "(expired)" : "(limit reached)"}
+                          </span>
+                        )}
+                        <div className="flex-1" />
+                        <button
+                          onClick={() => handleCopyInvite(inv)}
+                          className="text-primary hover:text-primary/80 transition-colors flex-shrink-0"
+                        >
+                          {copiedInviteId === inv.id ? "Copied!" : "Copy"}
+                        </button>
+                        <button
+                          onClick={() => handleRevokeInvite(inv.id)}
+                          className="text-destructive hover:text-destructive/80 transition-colors flex-shrink-0"
+                        >
+                          Revoke
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-[10px] text-muted-foreground italic">No active invite links.</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Local agent config — desktop only */}
       {isTauri && localProject && !editing && (

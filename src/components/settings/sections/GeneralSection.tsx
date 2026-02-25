@@ -1,9 +1,11 @@
 import { useAuthStore } from "@/stores/authStore";
+import { storage } from "@/lib/platform";
 
 export function GeneralSection() {
   const username = useAuthStore((s) => s.username);
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    await storage.delete("auth");
     useAuthStore.getState().clearAuth();
     window.location.reload();
   };

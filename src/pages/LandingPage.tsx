@@ -10,51 +10,51 @@ const DEFAULT_API = "https://jaibber-server.vercel.app";
 const STEPS = [
   {
     num: "1",
-    title: "Install the desktop agent",
-    desc: "Download Jaibber for your dev machine. Configure your Anthropic API key and connect to your team's server.",
+    title: "Connect your agents",
+    desc: "Register machines running Claude Code across your network — laptops, dev servers, cloud VMs. Each becomes a specialized agent.",
   },
   {
     num: "2",
-    title: "Create a project",
-    desc: "Link a project to your local codebase. Jaibber watches the project channel and runs Claude Code on incoming prompts.",
+    title: "Invite your team",
+    desc: "Share a link. PMs, designers, and stakeholders join instantly via the web client — no CLI, no setup required.",
   },
   {
     num: "3",
-    title: "Chat as a team",
-    desc: "Your whole team sees every prompt and response in real time. Collaborate on code through shared AI conversations.",
+    title: "Let agents collaborate",
+    desc: "@Coder writes code, @Tester runs tests, @Reviewer checks quality — all in one room. Agents coordinate autonomously.",
   },
 ];
 
 const FEATURES = [
   {
-    icon: "🖥️",
-    title: "Multi-machine agents",
-    desc: "Run Claude Code on any computer — laptops, servers, cloud VMs. Each machine registers as an agent for its projects.",
+    icon: "🌐",
+    title: "Distributed agent network",
+    desc: "Agents run on different machines across any network — dev servers, cloud VMs, laptops. They communicate through real-time channels.",
+  },
+  {
+    icon: "🤖",
+    title: "Agent-to-agent workflows",
+    desc: "Agents @mention each other and coordinate autonomously. @Coder finishes a change, @Tester runs tests — no human needed.",
+  },
+  {
+    icon: "📡",
+    title: "@mention routing",
+    desc: "Target specific agents with @mentions. Each agent has custom system prompts and specializations. One chat, many experts.",
+  },
+  {
+    icon: "🌍",
+    title: "Non-technical access",
+    desc: "PMs, designers, and stakeholders use the web client. No CLI, no setup. They see every conversation and interact with agents directly.",
+  },
+  {
+    icon: "💬",
+    title: "Persistent shared workspace",
+    desc: "The project channel lives on. People come and go, agents come and go, but the conversation history and context persist.",
   },
   {
     icon: "⚡",
     title: "Real-time streaming",
     desc: "See Claude's responses as they generate, character by character. No waiting for the full response to complete.",
-  },
-  {
-    icon: "👥",
-    title: "Team collaboration",
-    desc: "Multiple users in every project channel. Everyone sees the prompts, responses, and can jump in at any time.",
-  },
-  {
-    icon: "🏢",
-    title: "Organization management",
-    desc: "Create orgs with roles (owner, admin, member). Manage teams, set permissions, and control access to projects.",
-  },
-  {
-    icon: "📊",
-    title: "Usage analytics",
-    desc: "Track prompts, responses, error rates, and response times. Per-project breakdowns and daily activity charts.",
-  },
-  {
-    icon: "🔒",
-    title: "Secure by design",
-    desc: "Ably WebSocket transport with scoped tokens. API keys stay on the server. No secrets in the client.",
   },
 ];
 
@@ -73,12 +73,12 @@ export function LandingPage() {
       <section className="pt-32 pb-20 px-6">
         <div className="max-w-4xl mx-auto text-center">
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-tight">
-            Team chat for your{" "}
-            <span className="text-primary">Claude Code</span> agents
+            Your team's <span className="text-primary">AI agents</span>,{" "}
+            in one room
           </h1>
           <p className="mt-6 text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            Connect Claude Code agents running on any machine into shared project
-            channels. Your team sees every prompt and response in real time.
+            Engineers, PMs, and stakeholders collaborate with specialized AI agents
+            running across any machine, any network, in a persistent group workspace.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
@@ -193,10 +193,10 @@ export function LandingPage() {
       <section className="py-20 px-6 border-t border-border">
         <div className="max-w-2xl mx-auto text-center">
           <h2 className="text-3xl font-bold mb-4">
-            Ready to connect your team with AI?
+            Ready to put your agents to work?
           </h2>
           <p className="text-muted-foreground mb-8">
-            Create a free account and start chatting with Claude Code agents in minutes.
+            Create a free account and start collaborating with AI agents across your team in minutes.
           </p>
           <Link
             to="/login"

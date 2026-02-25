@@ -5,12 +5,188 @@ import { useContactStore } from "@/stores/contactStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
-import { useProjectStore } from "@/stores/projectStore";
+import { useProjectStore, type LocalProject } from "@/stores/projectStore";
 import { runClaudeStream, listenEvent, isTauri } from "@/lib/platform";
 import { parseMentions } from "@/lib/mentions";
 import type { AblyMessage } from "@/types/message";
 import type { Contact, AgentInfo } from "@/types/contact";
 import type * as Ably from "ably";
+
+/** Max depth for agent-to-agent response chains. Prevents infinite loops. */
+const MAX_RESPONSE_DEPTH = 3;
+
+/**
+ * Shared agent response logic: creates a streaming bubble, runs Claude,
+ * publishes chunks/response to the channel. Used for both human→agent and
+ * agent→agent message handling.
+ */
+async function respondToMessage(
+  channel: Ably.RealtimeChannel,
+  contact: Contact,
+  localProject: LocalProject,
+  agentName: string,
+  userId: string,
+  promptText: string,
+  incomingDepth: number,
+  incomingChain: string[]
+) {
+  const convId = contact.id;
+  const nextDepth = incomingDepth + 1;
+  const nextChain = [...incomingChain, agentName.toLowerCase()];
+  const responseId = uuidv4();
+
+  useChatStore.getState().addMessage({
+    id: responseId,
+    conversationId: convId,
+    sender: "them",
+    senderName: agentName,
+    text: "",
+    timestamp: new Date().toISOString(),
+    status: "streaming",
+  });
+
+  channel.publish("message", {
+    from: userId,
+    fromUsername: agentName,
+    projectId: contact.id,
+    text: "",
+    messageId: uuidv4(),
+    responseId,
+    type: "typing",
+    agentName,
+  } satisfies AblyMessage);
+
+  // Build conversation context from recent chat history.
+  const recentMessages = (useChatStore.getState().messages[convId] ?? [])
+    .filter((m) => m.status === "done" && m.id !== responseId)
+    .slice(-20)
+    .map((m) => {
+      const role = m.sender === "me" ? "User" : `Assistant (${m.senderName || "Agent"})`;
+      return `${role}: ${m.text}`;
+    })
+    .join("\n\n");
+
+  // Ably chunk batching: accumulate chunks, flush every 200ms
+  let chunkBuffer = "";
+  let flushTimer: ReturnType<typeof setTimeout> | null = null;
+  const flushChunks = () => {
+    if (!chunkBuffer) return;
+    const text = chunkBuffer;
+    chunkBuffer = "";
+    channel.publish("message", {
+      from: userId,
+      fromUsername: agentName,
+      projectId: contact.id,
+      text,
+      messageId: responseId,
+      type: "chunk",
+      agentName,
+    } satisfies AblyMessage);
+  };
+
+  // Listen for streaming events from Rust
+  const unlisten = await listenEvent<{
+    responseId: string;
+    chunk: string;
+    done: boolean;
+    error: string | null;
+  }>("claude-chunk", (event) => {
+    if (event.responseId !== responseId) return;
+
+    if (event.done) {
+      if (flushTimer) clearTimeout(flushTimer);
+      flushChunks();
+
+      useChatStore.getState().markDone(convId, responseId);
+      const fullText = (useChatStore.getState().messages[convId] ?? [])
+        .find((m) => m.id === responseId)?.text ?? "";
+      channel.publish("message", {
+        from: userId,
+        fromUsername: agentName,
+        projectId: contact.id,
+        text: fullText,
+        messageId: responseId,
+        type: "response",
+        agentName,
+        isAgentMessage: true,
+        responseDepth: nextDepth,
+        respondingChain: nextChain,
+      } satisfies AblyMessage);
+      unlisten();
+    } else if (event.error) {
+      if (flushTimer) clearTimeout(flushTimer);
+      const errText = `Agent error: ${event.error}`;
+      useChatStore.getState().appendChunk(convId, responseId, errText);
+      useChatStore.getState().updateStatus(convId, responseId, "error");
+      channel.publish("message", {
+        from: userId,
+        fromUsername: agentName,
+        projectId: contact.id,
+        text: errText,
+        messageId: responseId,
+        type: "error",
+        agentName,
+      } satisfies AblyMessage);
+      unlisten();
+    } else {
+      useChatStore.getState().appendChunk(convId, responseId, event.chunk);
+      chunkBuffer += event.chunk;
+      if (!flushTimer) {
+        flushTimer = setTimeout(() => {
+          flushTimer = null;
+          flushChunks();
+        }, 200);
+      }
+    }
+  });
+
+  // Kick off streaming Claude process
+  try {
+    await runClaudeStream({
+      prompt: promptText,
+      projectDir: localProject.projectDir,
+      responseId,
+      systemPrompt: localProject.agentInstructions || "",
+      conversationContext: recentMessages,
+    });
+  } catch (err) {
+    if (flushTimer) clearTimeout(flushTimer);
+    const errText = `Agent error: ${err}`;
+    useChatStore.getState().appendChunk(convId, responseId, errText);
+    useChatStore.getState().updateStatus(convId, responseId, "error");
+    channel.publish("message", {
+      from: userId,
+      fromUsername: agentName,
+      projectId: contact.id,
+      text: errText,
+      messageId: responseId,
+      type: "error",
+      agentName,
+    } satisfies AblyMessage);
+    unlisten();
+  }
+}
+
+/**
+ * Check if this agent should respond to an incoming message/response,
+ * applying @mention routing and loop prevention.
+ * Returns true if the agent should respond.
+ */
+function shouldAgentRespond(
+  text: string,
+  agentName: string,
+  depth: number,
+  chain: string[]
+): boolean {
+  // Loop prevention: max depth
+  if (depth >= MAX_RESPONSE_DEPTH) return false;
+  // Loop prevention: already responded in this chain
+  if (chain.includes(agentName.toLowerCase())) return false;
+  // @mention routing: if mentions exist and none match this agent → skip
+  const mentions = parseMentions(text);
+  if (mentions.length > 0 && !mentions.includes(agentName.toLowerCase())) return false;
+  return true;
+}
 
 /**
  * Subscribe to one project channel: presence tracking + message handling.
@@ -24,8 +200,6 @@ function subscribeToProjectChannel(
 ): () => void {
   const channel = ably.channels.get(contact.ablyChannelName);
 
-  // Include whether this connection is an agent (has this project registered locally).
-  // Only agent connections count as "online" — web/viewer connections don't.
   const localProject = useProjectStore.getState().projects.find(
     (p) => p.projectId === contact.id
   );
@@ -38,15 +212,12 @@ function subscribeToProjectChannel(
     machineName: localProject ? useSettingsStore.getState().settings.machineName : undefined,
   });
 
-  // Use connectionId (unique per connection) instead of clientId so that the
-  // same Jaibber account on two machines counts as two distinct presence members.
   const isOwnConnection = (member: { connectionId?: string }) =>
     member.connectionId != null && member.connectionId === ably.connection.id;
 
   const isAgentMember = (member: { data?: { isAgent?: boolean } }) =>
     member.data?.isAgent === true;
 
-  // Extract AgentInfo from presence members and update contactStore
   const syncAgents = () => {
     channel.presence.get().then((members) => {
       const remoteAgents = members.filter((m) => !isOwnConnection(m) && isAgentMember(m));
@@ -77,7 +248,6 @@ function subscribeToProjectChannel(
     syncAgents();
   });
 
-  // Hydrate initial online state
   syncAgents();
 
   // Subscribe to messages on this project channel
@@ -87,10 +257,6 @@ function subscribeToProjectChannel(
 
     const convId = contact.id;
     const isMine = payload.from === userId;
-    // Use connectionId to detect messages from THIS specific connection.
-    // isMine checks userId (same user on any device), but for agent responses
-    // we need to know if THIS connection published it — otherwise the web client
-    // (same user, different connection) would skip the agent's responses.
     const isFromThisConnection = msg.connectionId === ably.connection.id;
 
     if (payload.type === "message") {
@@ -105,156 +271,21 @@ function subscribeToProjectChannel(
         status: "done",
       });
 
-      // If this machine has the project registered locally → act as responder.
-      // Only Tauri desktop instances can run Claude — web clients are chat-only.
+      // Agent response: check if this machine should respond
       if (isTauri) {
-        const localProject = useProjectStore.getState().projects.find(
+        const lp = useProjectStore.getState().projects.find(
           (p) => p.projectId === contact.id
         );
-        if (localProject) {
-          const agentName = localProject.agentName || "Agent";
+        if (lp) {
+          const name = lp.agentName || "Agent";
+          const depth = payload.responseDepth ?? 0;
+          const chain = payload.respondingChain ?? [];
 
-          // @mention routing: if mentions exist and none match this agent → skip
-          const mentions = parseMentions(payload.text);
-          if (mentions.length > 0 && !mentions.includes(agentName.toLowerCase())) {
-            return; // another agent is targeted
-          }
-
-          const responseId = uuidv4();
-
-          useChatStore.getState().addMessage({
-            id: responseId,
-            conversationId: convId,
-            sender: "them",
-            senderName: agentName,
-            text: "",
-            timestamp: new Date().toISOString(),
-            status: "streaming",
-          });
-
-          channel.publish("message", {
-            from: userId,
-            fromUsername: agentName,
-            projectId: contact.id,
-            text: "",
-            messageId: uuidv4(),
-            responseId,
-            type: "typing",
-            agentName,
-          } satisfies AblyMessage);
-
-          // Build conversation context from recent chat history.
-          // Use User:/Assistant: labels that Claude naturally understands.
-          const recentMessages = (useChatStore.getState().messages[convId] ?? [])
-            .filter((m) => m.status === "done" && m.id !== responseId)
-            .slice(-20)
-            .map((m) => {
-              const role = m.sender === "me" ? "User" : `Assistant (${m.senderName || "Agent"})`;
-              return `${role}: ${m.text}`;
-            })
-            .join("\n\n");
-
-          // Ably chunk batching: accumulate chunks, flush every 200ms
-          let chunkBuffer = "";
-          let flushTimer: ReturnType<typeof setTimeout> | null = null;
-          const flushChunks = () => {
-            if (!chunkBuffer) return;
-            const text = chunkBuffer;
-            chunkBuffer = "";
-            channel.publish("message", {
-              from: userId,
-              fromUsername: agentName,
-              projectId: contact.id,
-              text,
-              messageId: responseId,
-              type: "chunk",
-              agentName,
-            } satisfies AblyMessage);
-          };
-
-          // Listen for streaming events from Rust
-          const unlisten = await listenEvent<{
-            responseId: string;
-            chunk: string;
-            done: boolean;
-            error: string | null;
-          }>("claude-chunk", (event) => {
-            if (event.responseId !== responseId) return;
-
-            if (event.done) {
-              // Flush remaining buffer
-              if (flushTimer) clearTimeout(flushTimer);
-              flushChunks();
-
-              useChatStore.getState().markDone(convId, responseId);
-              const fullText = (useChatStore.getState().messages[convId] ?? [])
-                .find((m) => m.id === responseId)?.text ?? "";
-              channel.publish("message", {
-                from: userId,
-                fromUsername: agentName,
-                projectId: contact.id,
-                text: fullText,
-                messageId: responseId,
-                type: "response",
-                agentName,
-              } satisfies AblyMessage);
-              unlisten();
-            } else if (event.error) {
-              if (flushTimer) clearTimeout(flushTimer);
-              const errText = `Agent error: ${event.error}`;
-              useChatStore.getState().appendChunk(convId, responseId, errText);
-              useChatStore.getState().updateStatus(convId, responseId, "error");
-              channel.publish("message", {
-                from: userId,
-                fromUsername: agentName,
-                projectId: contact.id,
-                text: errText,
-                messageId: responseId,
-                type: "error",
-                agentName,
-              } satisfies AblyMessage);
-              unlisten();
-            } else {
-              // Streaming chunk — update local store immediately, batch for Ably
-              useChatStore.getState().appendChunk(convId, responseId, event.chunk);
-              chunkBuffer += event.chunk;
-              if (!flushTimer) {
-                flushTimer = setTimeout(() => {
-                  flushTimer = null;
-                  flushChunks();
-                }, 200);
-              }
-            }
-          });
-
-          // Kick off streaming Claude process
-          try {
-            await runClaudeStream({
-              prompt: payload.text,
-              projectDir: localProject.projectDir,
-              responseId,
-              systemPrompt: localProject.agentInstructions || "",
-              conversationContext: recentMessages,
-            });
-          } catch (err) {
-            // runClaudeStream rejects if spawn fails
-            if (flushTimer) clearTimeout(flushTimer);
-            const errText = `Agent error: ${err}`;
-            useChatStore.getState().appendChunk(convId, responseId, errText);
-            useChatStore.getState().updateStatus(convId, responseId, "error");
-            channel.publish("message", {
-              from: userId,
-              fromUsername: agentName,
-              projectId: contact.id,
-              text: errText,
-              messageId: responseId,
-              type: "error",
-              agentName,
-            } satisfies AblyMessage);
-            unlisten();
+          if (shouldAgentRespond(payload.text, name, depth, chain)) {
+            respondToMessage(channel, contact, lp, name, userId, payload.text, depth, chain);
           }
         }
-      } // end isTauri agent check
+      }
     } else if (payload.type === "typing") {
       if (isFromThisConnection) return;
       const bubbleId = payload.responseId ?? `typing-${payload.from}-${Date.now()}`;
@@ -279,6 +310,28 @@ function subscribeToProjectChannel(
         payload.text,
         isError ? "error" : "done"
       );
+
+      // Agent-to-agent: if a completed response @mentions this agent, respond.
+      // The response is already displayed — just trigger a new agent response.
+      if (!isError && payload.isAgentMessage && payload.text && isTauri) {
+        const lp = useProjectStore.getState().projects.find(
+          (p) => p.projectId === contact.id
+        );
+        if (lp) {
+          const name = lp.agentName || "Agent";
+          const depth = payload.responseDepth ?? 0;
+          const chain = payload.respondingChain ?? [];
+          const mentions = parseMentions(payload.text);
+
+          // Only respond if explicitly @mentioned (agent-to-agent requires explicit mention)
+          if (
+            mentions.includes(name.toLowerCase()) &&
+            shouldAgentRespond(payload.text, name, depth, chain)
+          ) {
+            respondToMessage(channel, contact, lp, name, userId, payload.text, depth, chain);
+          }
+        }
+      }
     }
   });
 
@@ -292,7 +345,6 @@ export function useAbly() {
   const initializedRef = useRef(false);
   const ablyRef = useRef<Ably.Realtime | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
-  // Track which channels we've already subscribed to (by channel name)
   const channelCleanupsRef = useRef(new Map<string, () => void>());
 
   useEffect(() => {
@@ -319,7 +371,6 @@ export function useAbly() {
       ablyRef.current = ably;
       initializedRef.current = true;
 
-      // Enter global presence channel
       const localProjects = useProjectStore.getState().projects;
       const presenceChannel = ably.channels.get("jaibber:presence");
       presenceChannel.presence.enter({
@@ -328,7 +379,6 @@ export function useAbly() {
         projectIds: localProjects.map((p) => p.projectId),
       });
 
-      // Subscribe to all current project channels
       for (const contact of Object.values(contacts)) {
         ensureChannelSubscribed(contact);
       }
@@ -341,7 +391,6 @@ export function useAbly() {
       };
     };
 
-    // When contacts change after init, subscribe to any new project channels
     const handleContactsChange = () => {
       if (!initializedRef.current) {
         tryInit();

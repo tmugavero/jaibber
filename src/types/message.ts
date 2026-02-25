@@ -18,4 +18,8 @@ export interface AblyMessage {
   responseId?: string;    // sent in "typing" so receivers can pre-create bubble with correct ID
   agentName?: string;     // set on agent messages (typing/response/chunk/error)
   mentions?: string[];    // parsed @mention targets from user messages
+  // Agent-to-agent loop prevention
+  isAgentMessage?: boolean;     // true if this message was sent by an agent (not a human)
+  responseDepth?: number;       // 0 for human messages, +1 for each agent response in a chain
+  respondingChain?: string[];   // agentNames that have already responded in this chain
 }
