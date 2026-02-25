@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { openUrl, saveSettings, isTauri } from "@/lib/platform";
+import { openUrl, saveSettings } from "@/lib/platform";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { cn } from "@/lib/cn";
@@ -22,10 +22,7 @@ export function LoginScreen({ onLogin }: Props) {
   // GitHub token paste
   const [githubToken, setGithubToken] = useState("");
 
-  // API base URL (editable so users can point to their own deployment)
-  const [apiBaseUrl, setApiBaseUrl] = useState(
-    useSettingsStore.getState().settings.apiBaseUrl || "https://jaibber-server.vercel.app"
-  );
+  const apiBaseUrl = useSettingsStore.getState().settings.apiBaseUrl || "https://jaibber-server.vercel.app";
 
   const handleCredentialsLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -106,22 +103,6 @@ export function LoginScreen({ onLogin }: Props) {
         </div>
 
         <div className="bg-card rounded-2xl border border-border p-6 shadow-xl space-y-4">
-          {/* API base URL — desktop only (web uses hardcoded default) */}
-          {isTauri && (
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                Server URL
-              </label>
-              <input
-                type="text"
-                value={apiBaseUrl}
-                onChange={(e) => setApiBaseUrl(e.target.value.replace(/\/$/, ""))}
-                placeholder="https://jaibber-server.vercel.app"
-                className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
-              />
-            </div>
-          )}
-
           {/* Tab switcher */}
           <div className="flex gap-1 bg-muted/30 rounded-lg p-1">
             {(["credentials", "github"] as Tab[]).map((t) => (
