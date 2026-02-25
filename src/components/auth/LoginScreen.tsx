@@ -9,9 +9,11 @@ interface Props {
 }
 
 type Tab = "credentials" | "github";
+type Mode = "signin" | "register";
 
 export function LoginScreen({ onLogin }: Props) {
   const [tab, setTab] = useState<Tab>("credentials");
+  const [mode, setMode] = useState<Mode>("signin");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,6 +49,30 @@ export function LoginScreen({ onLogin }: Props) {
       useSettingsStore.getState().setSettings(updatedSettings);
       await saveSettings(updatedSettings);
       onLogin();
+    } catch (e) {
+      setError(`Network error: ${e}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRegister = async () => {
+    if (!username.trim() || !password.trim()) {
+      setError("Username and password are required.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username.trim(), password }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? "Registration failed."); return; }
+      // Auto-login after registration
+      await handleCredentialsLogin();
     } catch (e) {
       setError(`Network error: ${e}`);
     } finally {
@@ -131,7 +157,7 @@ export function LoginScreen({ onLogin }: Props) {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="your-username"
+                  placeholder={mode === "register" ? "Choose a username" : "your-username"}
                   autoComplete="username"
                   className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
                 />
@@ -144,49 +170,28 @@ export function LoginScreen({ onLogin }: Props) {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                  onKeyDown={(e) => { if (e.key === "Enter") handleCredentialsLogin(); }}
+                  placeholder={mode === "register" ? "Choose a password" : "••••••••"}
+                  autoComplete={mode === "register" ? "new-password" : "current-password"}
+                  onKeyDown={(e) => { if (e.key === "Enter") mode === "register" ? handleRegister() : handleCredentialsLogin(); }}
                   className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
                 />
               </div>
               <button
-                onClick={handleCredentialsLogin}
+                onClick={mode === "register" ? handleRegister : handleCredentialsLogin}
                 disabled={saving}
                 className="w-full bg-primary text-primary-foreground rounded-xl py-2.5 text-sm font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-wait"
               >
-                {saving ? "Signing in…" : "Sign in"}
+                {saving
+                  ? (mode === "register" ? "Creating account…" : "Signing in…")
+                  : (mode === "register" ? "Create account" : "Sign in")}
               </button>
               <p className="text-xs text-center text-muted-foreground">
-                No account?{" "}
+                {mode === "signin" ? "No account? " : "Already have an account? "}
                 <button
-                  onClick={async () => {
-                    if (!username.trim() || !password.trim()) {
-                      setError("Enter a username and password to register.");
-                      return;
-                    }
-                    setSaving(true);
-                    setError(null);
-                    try {
-                      const res = await fetch(`${apiBaseUrl}/api/auth/register`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ username: username.trim(), password }),
-                      });
-                      const data = await res.json();
-                      if (!res.ok) { setError(data.error ?? "Registration failed."); return; }
-                      // Auto-login after registration
-                      await handleCredentialsLogin();
-                    } catch (e) {
-                      setError(`Network error: ${e}`);
-                    } finally {
-                      setSaving(false);
-                    }
-                  }}
-                  disabled={saving}
+                  onClick={() => { setMode(mode === "signin" ? "register" : "signin"); setError(null); }}
                   className="text-primary hover:underline"
                 >
-                  Register
+                  {mode === "signin" ? "Register" : "Sign in"}
                 </button>
               </p>
             </div>
