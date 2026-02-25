@@ -9,6 +9,7 @@ export interface Contact {
   id: string;               // projectId UUID
   name: string;             // project name from server
   description: string | null;
+  ownerId: string | null;   // project creator's userId
   ablyChannelName: string;  // "jaibber:project:{id}"
   isOnline: boolean;        // from Ably presence on project channel
   lastSeen: string | null;

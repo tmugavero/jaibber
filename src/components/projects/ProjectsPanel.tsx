@@ -59,8 +59,11 @@ function ProjectCard({ contact }: { contact: Contact }) {
   const [joining, setJoining] = useState(false);
 
   const defaultAgentName = useSettingsStore.getState().settings.machineName || "Agent";
+  const currentUserId = useAuthStore((s) => s.userId);
   const isAdmin = contact.role === "admin";
   const isOrgAdmin = contact.role === "org-admin";
+  const isCreator = contact.ownerId != null && contact.ownerId === currentUserId;
+  const roleLabel = isOrgAdmin ? "org" : isCreator ? "creator" : contact.role;
 
   const getAuthHeaders = () => {
     const { token } = useAuthStore.getState();
@@ -229,7 +232,7 @@ function ProjectCard({ contact }: { contact: Contact }) {
       const res = await fetch(`${apiBaseUrl}/api/projects/${contact.id}/members`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ username: uname, role: "admin" }),
+        body: JSON.stringify({ username: uname, role: "member" }),
       });
       if (res.ok) {
         // Refresh contacts to get updated role
@@ -264,13 +267,15 @@ function ProjectCard({ contact }: { contact: Contact }) {
             )}
           </div>
           <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${
-            contact.role === "admin"
-              ? "bg-primary/10 text-primary"
-              : contact.role === "org-admin"
-                ? "bg-amber-500/10 text-amber-600"
-                : "bg-muted text-muted-foreground"
+            isOrgAdmin
+              ? "bg-amber-500/10 text-amber-600"
+              : isCreator
+                ? "bg-emerald-500/10 text-emerald-600"
+                : contact.role === "admin"
+                  ? "bg-primary/10 text-primary"
+                  : "bg-muted text-muted-foreground"
           }`}>
-            {contact.role === "org-admin" ? "org" : contact.role}
+            {roleLabel}
           </span>
         </div>
 
@@ -596,6 +601,7 @@ export function ProjectsPanel() {
         id: p.id,
         name: p.name,
         description: p.description ?? null,
+        ownerId: p.ownerId ?? null,
         ablyChannelName: p.ablyChannelName,
         isOnline: false,
         lastSeen: null,

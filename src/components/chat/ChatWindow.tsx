@@ -222,21 +222,27 @@ export function ChatWindow({ contactId, onBack }: Props) {
                 <div className="text-xs text-muted-foreground animate-pulse">Loading...</div>
               ) : projectMembers.length > 0 ? (
                 <div className="space-y-1">
-                  {projectMembers.map((m) => (
-                    <div key={m.userId} className="flex items-center gap-1.5 text-xs">
-                      <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-[9px] font-semibold text-primary flex-shrink-0">
-                        {m.username.charAt(0).toUpperCase()}
+                  {projectMembers.map((m) => {
+                    const isMemberCreator = contact?.ownerId != null && m.userId === contact.ownerId;
+                    const memberLabel = isMemberCreator ? "creator" : m.role;
+                    return (
+                      <div key={m.userId} className="flex items-center gap-1.5 text-xs">
+                        <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-[9px] font-semibold text-primary flex-shrink-0">
+                          {m.username.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="text-foreground font-medium">{m.username}</span>
+                        <span className={`text-[9px] px-1 py-0.5 rounded-full ${
+                          isMemberCreator
+                            ? "bg-emerald-500/10 text-emerald-600"
+                            : m.role === "admin"
+                              ? "bg-primary/10 text-primary"
+                              : "bg-muted text-muted-foreground"
+                        }`}>
+                          {memberLabel}
+                        </span>
                       </div>
-                      <span className="text-foreground font-medium">{m.username}</span>
-                      <span className={`text-[9px] px-1 py-0.5 rounded-full ${
-                        m.role === "admin"
-                          ? "bg-primary/10 text-primary"
-                          : "bg-muted text-muted-foreground"
-                      }`}>
-                        {m.role}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-xs text-muted-foreground italic">No members loaded.</div>

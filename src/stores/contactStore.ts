@@ -27,6 +27,7 @@ export const useContactStore = create<ContactStore>((set) => ({
         id: p.id,
         name: p.name,
         description: p.description ?? null,
+        ownerId: p.ownerId ?? null,
         ablyChannelName: p.ablyChannelName,
         isOnline: prev?.isOnline ?? false,
         lastSeen: prev?.lastSeen ?? null,
