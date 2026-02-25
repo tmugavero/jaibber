@@ -294,7 +294,13 @@ export function ChatWindow({ contactId, onBack }: Props) {
       </div>
 
       {/* Input */}
-      <MessageInput onSend={handleSend} disabled={hasStreamingFromThem} />
+      {contact?.role === "org-admin" ? (
+        <div className="px-4 py-3 border-t border-border text-center text-xs text-muted-foreground">
+          You are viewing this project as an org admin. Join the project to participate.
+        </div>
+      ) : (
+        <MessageInput onSend={handleSend} disabled={hasStreamingFromThem} />
+      )}
     </div>
   );
 }

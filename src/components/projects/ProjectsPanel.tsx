@@ -56,8 +56,11 @@ function ProjectCard({ contact }: { contact: Contact }) {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [loadingInvites, setLoadingInvites] = useState(false);
 
+  const [joining, setJoining] = useState(false);
+
   const defaultAgentName = useSettingsStore.getState().settings.machineName || "Agent";
   const isAdmin = contact.role === "admin";
+  const isOrgAdmin = contact.role === "org-admin";
 
   const getAuthHeaders = () => {
     const { token } = useAuthStore.getState();
@@ -217,6 +220,26 @@ function ProjectCard({ contact }: { contact: Contact }) {
     } catch { /* ignore */ }
   };
 
+  const handleJoinProject = async () => {
+    const { token, username: uname } = useAuthStore.getState();
+    const { apiBaseUrl } = useSettingsStore.getState().settings;
+    if (!token || !apiBaseUrl || !uname) return;
+    setJoining(true);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/projects/${contact.id}/members`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ username: uname, role: "admin" }),
+      });
+      if (res.ok) {
+        // Refresh contacts to get updated role
+        await useContactStore.getState().loadFromServer(apiBaseUrl, token);
+      }
+    } catch { /* ignore */ } finally {
+      setJoining(false);
+    }
+  };
+
   const inputClass = "w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50";
 
   return (
@@ -243,9 +266,11 @@ function ProjectCard({ contact }: { contact: Contact }) {
           <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${
             contact.role === "admin"
               ? "bg-primary/10 text-primary"
-              : "bg-muted text-muted-foreground"
+              : contact.role === "org-admin"
+                ? "bg-amber-500/10 text-amber-600"
+                : "bg-muted text-muted-foreground"
           }`}>
-            {contact.role}
+            {contact.role === "org-admin" ? "org" : contact.role}
           </span>
         </div>
 
@@ -370,8 +395,8 @@ function ProjectCard({ contact }: { contact: Contact }) {
         </div>
       )}
 
-      {/* Local agent config — desktop only */}
-      {isTauri && localProject && !editing && (
+      {/* Local agent config — desktop only, not for org-admin view-only */}
+      {!isOrgAdmin && isTauri && localProject && !editing && (
         <div className="border-t border-border/50 bg-muted/10 px-3 py-2 space-y-1">
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-primary/80 font-medium">
@@ -435,8 +460,8 @@ function ProjectCard({ contact }: { contact: Contact }) {
         </div>
       )}
 
-      {/* Link to this machine — desktop only, not yet registered */}
-      {isTauri && !localProject && !linking && (
+      {/* Link to this machine — desktop only, not yet registered, not org-admin view-only */}
+      {!isOrgAdmin && isTauri && !localProject && !linking && (
         <div className="border-t border-border/50 px-3 py-2">
           <button
             onClick={() => setLinking(true)}
@@ -447,7 +472,7 @@ function ProjectCard({ contact }: { contact: Contact }) {
         </div>
       )}
 
-      {isTauri && !localProject && linking && (
+      {!isOrgAdmin && isTauri && !localProject && linking && (
         <div className="border-t border-border/50 bg-muted/10 px-3 py-2 space-y-2">
           <p className="text-[11px] font-medium text-foreground">Register agent</p>
           <input
@@ -489,21 +514,33 @@ function ProjectCard({ contact }: { contact: Contact }) {
         </div>
       )}
 
-      {/* Leave / Delete project */}
+      {/* Join / Leave / Delete project */}
       <div className="border-t border-border/50 px-3 py-2 flex gap-3">
-        <button
-          onClick={handleLeaveProject}
-          className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
-        >
-          Leave project
-        </button>
-        {isAdmin && (
+        {isOrgAdmin ? (
           <button
-            onClick={handleDeleteProject}
-            className="text-[11px] text-destructive/60 hover:text-destructive transition-colors"
+            onClick={handleJoinProject}
+            disabled={joining}
+            className="text-[11px] text-primary hover:text-primary/80 transition-colors font-medium disabled:opacity-50"
           >
-            Delete project
+            {joining ? "Joining..." : "Join project"}
           </button>
+        ) : (
+          <>
+            <button
+              onClick={handleLeaveProject}
+              className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+            >
+              Leave project
+            </button>
+            {isAdmin && (
+              <button
+                onClick={handleDeleteProject}
+                className="text-[11px] text-destructive/60 hover:text-destructive transition-colors"
+              >
+                Delete project
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

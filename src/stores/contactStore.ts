@@ -19,17 +19,19 @@ export const useContactStore = create<ContactStore>((set) => ({
     });
     if (!res.ok) throw new Error(`Failed to load projects: ${res.status}`);
     const { projects } = await res.json();
+    const existing = useContactStore.getState().contacts;
     const contacts: Record<string, Contact> = {};
     for (const p of projects) {
+      const prev = existing[p.id];
       contacts[p.id] = {
         id: p.id,
         name: p.name,
         description: p.description ?? null,
         ablyChannelName: p.ablyChannelName,
-        isOnline: false,
-        lastSeen: null,
+        isOnline: prev?.isOnline ?? false,
+        lastSeen: prev?.lastSeen ?? null,
         role: p.role,
-        onlineAgents: [],
+        onlineAgents: prev?.onlineAgents ?? [],
         createdAt: p.createdAt ?? null,
         memberCount: p.memberCount ?? null,
       };

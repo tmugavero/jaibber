@@ -12,7 +12,7 @@ export interface Contact {
   ablyChannelName: string;  // "jaibber:project:{id}"
   isOnline: boolean;        // from Ably presence on project channel
   lastSeen: string | null;
-  role: "admin" | "member";
+  role: "admin" | "member" | "org-admin";
   onlineAgents: AgentInfo[];  // agents currently online for this project
   createdAt: string | null;   // ISO timestamp from server
   memberCount: number | null; // number of members from server

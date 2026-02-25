@@ -347,6 +347,8 @@ export function useAbly() {
 
   useEffect(() => {
     const ensureChannelSubscribed = (contact: Contact) => {
+      // Skip org-admin view-only projects — user has no Ably capability for these channels
+      if (contact.role === "org-admin") return;
       if (channelCleanupsRef.current.has(contact.ablyChannelName)) return;
       const ably = ablyRef.current;
       if (!ably) return;
