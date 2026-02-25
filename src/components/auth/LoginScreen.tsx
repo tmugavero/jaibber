@@ -20,6 +20,7 @@ export function LoginScreen({ onLogin }: Props) {
   // Credentials form
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   // GitHub token paste
   const [githubToken, setGithubToken] = useState("");
@@ -59,6 +60,10 @@ export function LoginScreen({ onLogin }: Props) {
   const handleRegister = async () => {
     if (!username.trim() || !password.trim()) {
       setError("Username and password are required.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
       return;
     }
     setSaving(true);
@@ -176,6 +181,22 @@ export function LoginScreen({ onLogin }: Props) {
                   className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
                 />
               </div>
+              {mode === "register" && (
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                    Confirm password
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Re-enter your password"
+                    autoComplete="new-password"
+                    onKeyDown={(e) => { if (e.key === "Enter") handleRegister(); }}
+                    className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+                  />
+                </div>
+              )}
               <button
                 onClick={mode === "register" ? handleRegister : handleCredentialsLogin}
                 disabled={saving}
@@ -188,7 +209,7 @@ export function LoginScreen({ onLogin }: Props) {
               <p className="text-xs text-center text-muted-foreground">
                 {mode === "signin" ? "No account? " : "Already have an account? "}
                 <button
-                  onClick={() => { setMode(mode === "signin" ? "register" : "signin"); setError(null); }}
+                  onClick={() => { setMode(mode === "signin" ? "register" : "signin"); setConfirmPassword(""); setError(null); }}
                   className="text-primary hover:underline"
                 >
                   {mode === "signin" ? "Register" : "Sign in"}
