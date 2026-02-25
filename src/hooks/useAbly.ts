@@ -198,7 +198,9 @@ function subscribeToProjectChannel(
   userId: string,
   username: string
 ): () => void {
-  const channel = ably.channels.get(contact.ablyChannelName);
+  const channel = ably.channels.get(contact.ablyChannelName, {
+    params: { rewind: "2m" },
+  });
 
   const localProject = useProjectStore.getState().projects.find(
     (p) => p.projectId === contact.id
@@ -406,8 +408,34 @@ export function useAbly() {
         return;
       }
       const contacts = useContactStore.getState().contacts;
+      const ably = ablyRef.current;
+
+      // Check if any new channels need subscribing
+      let hasNewChannels = false;
       for (const contact of Object.values(contacts)) {
-        ensureChannelSubscribed(contact);
+        if (contact.role === "org-admin") continue;
+        if (!channelCleanupsRef.current.has(contact.ablyChannelName)) {
+          hasNewChannels = true;
+          break;
+        }
+      }
+
+      if (hasNewChannels && ably) {
+        // Force token refresh to get capabilities for new channels
+        ably.auth.authorize().then(() => {
+          for (const contact of Object.values(contacts)) {
+            ensureChannelSubscribed(contact);
+          }
+        }).catch(() => {
+          // Still try subscribing — might work if token already covers channels
+          for (const contact of Object.values(contacts)) {
+            ensureChannelSubscribed(contact);
+          }
+        });
+      } else {
+        for (const contact of Object.values(contacts)) {
+          ensureChannelSubscribed(contact);
+        }
       }
     };
 

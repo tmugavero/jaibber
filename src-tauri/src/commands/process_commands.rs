@@ -79,11 +79,42 @@ claude --print --dangerously-skip-permissions '{safe_prompt}'"#
     }
 }
 
-/// Streaming variant of `run_claude`. Spawns the Claude CLI process, reads
-/// stdout line-by-line, and emits each line as a Tauri event so the frontend
-/// can render responses incrementally.
+/// Extract text content from a stream-json event line.
+/// Handles various JSON structures emitted by `claude --output-format stream-json`.
+fn extract_text_from_event(json: &serde_json::Value) -> String {
+    // Partial content block delta: {"type":"content_block_delta","delta":{"type":"text_delta","text":"..."}}
+    if let Some(delta) = json.get("delta") {
+        if let Some(text) = delta.get("text").and_then(|t| t.as_str()) {
+            return text.to_string();
+        }
+    }
+
+    // Complete message: {"type":"message","content":[{"type":"text","text":"..."}]}
+    // or: {"message":{"content":[{"type":"text","text":"..."}]}}
+    let content = json.get("content")
+        .or_else(|| json.get("message").and_then(|m| m.get("content")));
+    if let Some(serde_json::Value::Array(items)) = content {
+        let mut text = String::new();
+        for item in items {
+            if item.get("type").and_then(|t| t.as_str()) == Some("text") {
+                if let Some(t) = item.get("text").and_then(|t| t.as_str()) {
+                    text.push_str(t);
+                }
+            }
+        }
+        return text;
+    }
+
+    String::new()
+}
+
+/// Streaming variant of `run_claude`. Spawns the Claude CLI with
+/// `--output-format stream-json --include-partial-messages` for real-time
+/// token-level streaming. Parses each JSON line and emits text chunks as
+/// Tauri events.
 ///
-/// The full prompt sent to Claude is:  system_prompt + conversation_context + user prompt.
+/// System prompt is passed via `--append-system-prompt`. Conversation context
+/// is included in the main prompt.
 #[tauri::command]
 pub async fn run_claude_stream(
     prompt: String,
@@ -103,14 +134,8 @@ pub async fn run_claude_stream(
         return Err(JaibberError::Other("project_dir must not be empty".into()));
     }
 
-    // Build full prompt: system instructions + conversation context + user message.
-    // The prompt must clearly separate context from the actual request so Claude
-    // doesn't interpret the history as a cut-off conversation.
+    // Build the user prompt with conversation context prepended.
     let mut full_prompt = String::new();
-    if !system_prompt.is_empty() {
-        full_prompt.push_str(&system_prompt);
-        full_prompt.push_str("\n\n");
-    }
     if !conversation_context.is_empty() {
         full_prompt.push_str(
             "Below is the recent conversation history for context. \
@@ -122,6 +147,15 @@ pub async fn run_claude_stream(
     full_prompt.push_str(&prompt);
 
     let safe_prompt = full_prompt.replace('\'', "'\''");
+    let safe_system = system_prompt.replace('\'', "'\''");
+
+    // Build claude command with stream-json output for real-time streaming.
+    // --append-system-prompt passes agent instructions as a proper system prompt.
+    let system_flag = if !safe_system.is_empty() {
+        format!("--append-system-prompt '{safe_system}' ")
+    } else {
+        String::new()
+    };
 
     let bash_cmd = format!(
         r#"export NVM_DIR="$HOME/.nvm"
@@ -134,7 +168,7 @@ export PATH="$PATH:/usr/local/bin:/usr/bin"
 for _d in "$HOME/AppData/Roaming/Claude/claude-code"/*/; do
   [ -d "$_d" ] && export PATH="$PATH:$_d"
 done
-claude --print --dangerously-skip-permissions '{safe_prompt}'"#
+claude --print --output-format stream-json --include-partial-messages {system_flag}--dangerously-skip-permissions '{safe_prompt}'"#
     );
 
     let mut cmd = tokio::process::Command::new("bash");
@@ -159,48 +193,96 @@ claude --print --dangerously-skip-permissions '{safe_prompt}'"#
     let rid = response_id.clone();
     let win = window.clone();
 
-    // Spawn a background task to read stdout line-by-line and emit events
+    // Spawn a background task to read stream-json lines and emit chunks
     tokio::spawn(async move {
+        use tokio::time::{timeout, Duration};
+
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
         let mut got_output = false;
+        let idle_timeout = Duration::from_secs(300); // 5-minute idle timeout
 
-        while let Ok(Some(line)) = lines.next_line().await {
-            got_output = true;
-            let _ = win.emit("claude-chunk", serde_json::json!({
-                "responseId": rid,
-                "chunk": format!("{}\n", line),
-                "done": false,
-                "error": null,
-            }));
+        loop {
+            match timeout(idle_timeout, lines.next_line()).await {
+                Ok(Ok(Some(line))) => {
+                    // Try to parse as stream-json event
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
+                        let text = extract_text_from_event(&json);
+                        if !text.is_empty() {
+                            got_output = true;
+                            let _ = win.emit("claude-chunk", serde_json::json!({
+                                "responseId": rid,
+                                "chunk": text,
+                                "done": false,
+                                "error": null,
+                            }));
+                        }
+                    } else if !line.trim().is_empty() {
+                        // Non-JSON line — emit as raw text (fallback)
+                        got_output = true;
+                        let _ = win.emit("claude-chunk", serde_json::json!({
+                            "responseId": rid,
+                            "chunk": format!("{}\n", line),
+                            "done": false,
+                            "error": null,
+                        }));
+                    }
+                }
+                Ok(Ok(None)) => break, // EOF — process finished
+                Ok(Err(_)) => break,   // Read error
+                Err(_) => {
+                    // 5-minute idle timeout — kill the hung process
+                    let _ = child.kill().await;
+                    let _ = win.emit("claude-chunk", serde_json::json!({
+                        "responseId": rid,
+                        "chunk": "",
+                        "done": false,
+                        "error": "Agent timed out (no output for 5 minutes)",
+                    }));
+                    return;
+                }
+            }
         }
 
-        // Wait for exit status
-        let status = child.wait().await;
-        let exit_status = status.ok();
-        let success = exit_status.map(|s| s.success()).unwrap_or(false);
-
-        // If we got output, treat as success even if exit code is non-zero.
-        // The claude CLI can exit non-zero after producing valid output.
-        if success || got_output {
-            let _ = win.emit("claude-chunk", serde_json::json!({
-                "responseId": rid,
-                "chunk": "",
-                "done": true,
-                "error": null,
-            }));
-        } else {
-            let code = exit_status
-                .and_then(|s| s.code())
-                .map(|c| c.to_string())
-                .unwrap_or_else(|| "?".into());
-            // Also capture stderr for a more useful error message
-            let _ = win.emit("claude-chunk", serde_json::json!({
-                "responseId": rid,
-                "chunk": "",
-                "done": false,
-                "error": format!("claude exited with code {code}"),
-            }));
+        // Wait for exit status with a 30-second timeout
+        match timeout(Duration::from_secs(30), child.wait()).await {
+            Ok(Ok(status)) => {
+                if status.success() || got_output {
+                    let _ = win.emit("claude-chunk", serde_json::json!({
+                        "responseId": rid,
+                        "chunk": "",
+                        "done": true,
+                        "error": null,
+                    }));
+                } else {
+                    let code = status.code().map(|c| c.to_string()).unwrap_or_else(|| "?".into());
+                    let _ = win.emit("claude-chunk", serde_json::json!({
+                        "responseId": rid,
+                        "chunk": "",
+                        "done": false,
+                        "error": format!("claude exited with code {code}"),
+                    }));
+                }
+            }
+            _ => {
+                // wait() timed out or errored — force kill
+                let _ = child.kill().await;
+                if got_output {
+                    let _ = win.emit("claude-chunk", serde_json::json!({
+                        "responseId": rid,
+                        "chunk": "",
+                        "done": true,
+                        "error": null,
+                    }));
+                } else {
+                    let _ = win.emit("claude-chunk", serde_json::json!({
+                        "responseId": rid,
+                        "chunk": "",
+                        "done": false,
+                        "error": "Agent process timed out",
+                    }));
+                }
+            }
         }
     });
 

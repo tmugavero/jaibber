@@ -6,6 +6,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { MessageBubble } from "./MessageBubble";
 import { MessageInput } from "./MessageInput";
 import { sendMessage } from "@/hooks/useAbly";
+import { getAbly } from "@/lib/ably";
 
 interface ProjectMember {
   userId: string;
@@ -84,6 +85,11 @@ export function ChatWindow({ contactId, onBack }: Props) {
       setAddMemberMsg({ type: "success", text: `Added ${data.member.username}` });
       setAddUsername("");
       await loadProjectMembers();
+      // Notify all clients to refresh their project list (new member needs to see this project)
+      const ably = getAbly();
+      if (ably) {
+        ably.channels.get("jaibber:presence").publish("refresh-projects", {});
+      }
       setTimeout(() => setAddMemberMsg(null), 3000);
     } catch (e) {
       setAddMemberMsg({ type: "error", text: `Network error: ${e}` });
