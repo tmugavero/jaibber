@@ -7,6 +7,7 @@ import { MessageBubble } from "./MessageBubble";
 import { MessageInput } from "./MessageInput";
 import { sendMessage } from "@/hooks/useAbly";
 import { getAbly } from "@/lib/ably";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 interface ProjectMember {
   userId: string;
@@ -32,6 +33,7 @@ export function ChatWindow({ contactId, onBack }: Props) {
   const [addUsername, setAddUsername] = useState("");
   const [addingMember, setAddingMember] = useState(false);
   const [addMemberMsg, setAddMemberMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const msgCount = messages?.length ?? 0;
 
@@ -159,11 +161,7 @@ export function ChatWindow({ contactId, onBack }: Props) {
           </button>
           {msgCount > 0 && (
             <button
-              onClick={() => {
-                if (confirm("Clear chat history for this project?")) {
-                  useChatStore.getState().clearConversation(contactId);
-                }
-              }}
+              onClick={() => setShowClearConfirm(true)}
               className="text-xs text-muted-foreground hover:text-destructive transition-colors px-2 py-1 rounded"
               title="Clear chat history"
             >
@@ -313,6 +311,16 @@ export function ChatWindow({ contactId, onBack }: Props) {
       ) : (
         <MessageInput onSend={handleSend} disabled={hasStreamingFromThem} />
       )}
+      <ConfirmDialog
+        open={showClearConfirm}
+        onConfirm={() => {
+          useChatStore.getState().clearConversation(contactId);
+          setShowClearConfirm(false);
+        }}
+        onCancel={() => setShowClearConfirm(false)}
+        title="Clear chat history"
+        description="Clear chat history for this project?"
+      />
     </div>
   );
 }

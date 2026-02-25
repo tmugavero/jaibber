@@ -7,6 +7,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useOrgStore } from "@/stores/orgStore";
 import { getAbly } from "@/lib/ably";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { LocalProject } from "@/stores/projectStore";
 import type { Contact } from "@/types/contact";
 
@@ -57,6 +58,7 @@ function ProjectCard({ contact }: { contact: Contact }) {
   const [loadingInvites, setLoadingInvites] = useState(false);
 
   const [joining, setJoining] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{ title: string; description: string; onConfirm: () => void; variant?: "destructive" } | null>(null);
 
   const defaultAgentName = useSettingsStore.getState().settings.machineName || "Agent";
   const currentUserId = useAuthStore((s) => s.userId);
@@ -186,41 +188,52 @@ function ProjectCard({ contact }: { contact: Contact }) {
     saveProjects(useProjectStore.getState().projects.filter((x) => x.projectId !== contact.id));
   };
 
-  const handleLeaveProject = async () => {
-    if (!confirm("Leave this project? You will need to be re-invited to rejoin.")) return;
-    const { token } = useAuthStore.getState();
-    const { userId } = useAuthStore.getState();
-    const { apiBaseUrl } = useSettingsStore.getState().settings;
-    if (!token || !apiBaseUrl || !userId) return;
-    try {
-      const res = await fetch(`${apiBaseUrl}/api/projects/${contact.id}/members/${userId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        useContactStore.getState().removeContact(contact.id);
-        useProjectStore.getState().removeProject(contact.id);
-        saveProjects(useProjectStore.getState().projects.filter((x) => x.projectId !== contact.id));
-      }
-    } catch { /* ignore */ }
+  const handleLeaveProject = () => {
+    setConfirmAction({
+      title: "Leave project",
+      description: "Leave this project? You will need to be re-invited to rejoin.",
+      variant: "destructive",
+      onConfirm: async () => {
+        const { token, userId } = useAuthStore.getState();
+        const { apiBaseUrl } = useSettingsStore.getState().settings;
+        if (!token || !apiBaseUrl || !userId) return;
+        try {
+          const res = await fetch(`${apiBaseUrl}/api/projects/${contact.id}/members/${userId}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            useContactStore.getState().removeContact(contact.id);
+            useProjectStore.getState().removeProject(contact.id);
+            saveProjects(useProjectStore.getState().projects.filter((x) => x.projectId !== contact.id));
+          }
+        } catch { /* ignore */ }
+      },
+    });
   };
 
-  const handleDeleteProject = async () => {
-    if (!confirm("Delete this project? This will remove it for ALL members and cannot be undone.")) return;
-    const { token } = useAuthStore.getState();
-    const { apiBaseUrl } = useSettingsStore.getState().settings;
-    if (!token || !apiBaseUrl) return;
-    try {
-      const res = await fetch(`${apiBaseUrl}/api/projects/${contact.id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        useContactStore.getState().removeContact(contact.id);
-        useProjectStore.getState().removeProject(contact.id);
-        saveProjects(useProjectStore.getState().projects.filter((x) => x.projectId !== contact.id));
-      }
-    } catch { /* ignore */ }
+  const handleDeleteProject = () => {
+    setConfirmAction({
+      title: "Delete project",
+      description: "Delete this project? This will remove it for ALL members and cannot be undone.",
+      variant: "destructive",
+      onConfirm: async () => {
+        const { token } = useAuthStore.getState();
+        const { apiBaseUrl } = useSettingsStore.getState().settings;
+        if (!token || !apiBaseUrl) return;
+        try {
+          const res = await fetch(`${apiBaseUrl}/api/projects/${contact.id}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            useContactStore.getState().removeContact(contact.id);
+            useProjectStore.getState().removeProject(contact.id);
+            saveProjects(useProjectStore.getState().projects.filter((x) => x.projectId !== contact.id));
+          }
+        } catch { /* ignore */ }
+      },
+    });
   };
 
   const handleJoinProject = async () => {
@@ -548,6 +561,18 @@ function ProjectCard({ contact }: { contact: Contact }) {
           </>
         )}
       </div>
+      <ConfirmDialog
+        open={!!confirmAction}
+        onConfirm={() => {
+          confirmAction?.onConfirm();
+          setConfirmAction(null);
+        }}
+        onCancel={() => setConfirmAction(null)}
+        title={confirmAction?.title ?? ""}
+        description={confirmAction?.description ?? ""}
+        confirmLabel={confirmAction?.title.startsWith("Delete") ? "Delete" : "Continue"}
+        variant={confirmAction?.variant}
+      />
     </div>
   );
 }

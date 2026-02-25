@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useOrgStore } from "@/stores/orgStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 interface OrgInvite {
   id: string;
@@ -39,6 +40,7 @@ export function OrganizationSection() {
   const [inviteUsername, setInviteUsername] = useState("");
   const [memberRole, setMemberRole] = useState<"member" | "admin">("member");
   const [addingMember, setAddingMember] = useState(false);
+  const [removeMember, setRemoveMember] = useState<OrgMember | null>(null);
   const [memberSuccess, setMemberSuccess] = useState<string | null>(null);
   const [memberError, setMemberError] = useState<string | null>(null);
 
@@ -249,11 +251,7 @@ export function OrganizationSection() {
                     </span>
                     {isOrgAdmin && m.userId !== userId && m.role !== "owner" && (
                       <button
-                        onClick={() => {
-                          if (confirm(`Remove ${m.username} from the organization?`)) {
-                            handleRemoveMember(m.userId);
-                          }
-                        }}
+                        onClick={() => setRemoveMember(m)}
                         className="text-[10px] text-destructive/60 hover:text-destructive transition-colors flex-shrink-0"
                       >
                         Remove
@@ -435,6 +433,18 @@ export function OrganizationSection() {
           )}
         </div>
       )}
+      <ConfirmDialog
+        open={!!removeMember}
+        onConfirm={() => {
+          if (removeMember) handleRemoveMember(removeMember.userId);
+          setRemoveMember(null);
+        }}
+        onCancel={() => setRemoveMember(null)}
+        title="Remove member"
+        description={removeMember ? `Remove ${removeMember.username} from the organization?` : ""}
+        confirmLabel="Remove"
+        variant="destructive"
+      />
     </div>
   );
 }

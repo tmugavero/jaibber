@@ -101,10 +101,13 @@ fn extract_text_from_event(json: &serde_json::Value) -> String {
     String::new()
 }
 
-/// Streaming variant of `run_claude`. Spawns the Claude CLI with
-/// `--output-format stream-json --include-partial-messages` for real-time
-/// token-level streaming. Parses each JSON line and emits text chunks as
-/// Tauri events.
+/// Streaming variant of `run_claude`. Spawns a CLI agent process and streams
+/// its stdout as Tauri events. Parses JSON lines (stream-json) for text
+/// extraction, falling back to raw text for non-JSON output.
+///
+/// Uses a two-tier idle timeout: 5 minutes before any output (waiting for agent
+/// to start), 60 seconds after output (detect lingering processes). If the
+/// process lingers after producing output, it's treated as successful completion.
 ///
 /// System prompt is passed via `--append-system-prompt`. Conversation context
 /// is included in the main prompt.
@@ -212,10 +215,15 @@ claude --print --verbose --output-format stream-json --append-system-prompt "$JA
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
         let mut got_output = false;
-        let idle_timeout = Duration::from_secs(300); // 5-minute idle timeout
+        // Before any output: wait up to 5 minutes for the agent to start responding.
+        // After output has started: if nothing new for 60 seconds, the agent is
+        // likely done and the process is just lingering (e.g. spawned a dev server).
+        let idle_timeout_initial = Duration::from_secs(300);
+        let idle_timeout_after_output = Duration::from_secs(60);
 
         loop {
-            match timeout(idle_timeout, lines.next_line()).await {
+            let wait = if got_output { idle_timeout_after_output } else { idle_timeout_initial };
+            match timeout(wait, lines.next_line()).await {
                 Ok(Ok(Some(line))) => {
                     // Try to parse as stream-json event
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
@@ -243,14 +251,27 @@ claude --print --verbose --output-format stream-json --append-system-prompt "$JA
                 Ok(Ok(None)) => break, // EOF — process finished
                 Ok(Err(_)) => break,   // Read error
                 Err(_) => {
-                    // 5-minute idle timeout — kill the hung process
+                    // Idle timeout fired — kill the lingering process
                     let _ = child.kill().await;
-                    let _ = win.emit("claude-chunk", serde_json::json!({
-                        "responseId": rid,
-                        "chunk": "",
-                        "done": false,
-                        "error": "Agent timed out (no output for 5 minutes)",
-                    }));
+                    if got_output {
+                        // Agent produced output but process didn't exit —
+                        // treat as successful completion (e.g. agent spawned
+                        // a long-running subprocess like a dev server).
+                        let _ = win.emit("claude-chunk", serde_json::json!({
+                            "responseId": rid,
+                            "chunk": "",
+                            "done": true,
+                            "error": null,
+                        }));
+                    } else {
+                        // No output at all — genuine timeout
+                        let _ = win.emit("claude-chunk", serde_json::json!({
+                            "responseId": rid,
+                            "chunk": "",
+                            "done": false,
+                            "error": "Agent timed out (no output for 5 minutes)",
+                        }));
+                    }
                     return;
                 }
             }
