@@ -4,13 +4,9 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use crate::state::AppState;
 use crate::error::JaibberError;
 
-/// Spawns `claude --print "<prompt>"` via bash -c so that the user's full
-/// shell environment (nvm, PATH, etc.) is available — Tauri's shell plugin
-/// strips the environment when spawning, causing Claude Code to hang.
-///
-/// `project_dir` is passed per-call from the frontend (projectStore) rather
-/// than stored globally in settings, enabling one Jaibber instance to serve
-/// multiple projects by using a different directory each time.
+/// Spawns `claude --print "$JAIBBER_PROMPT"` via bash -c so that the user's
+/// full shell environment (nvm, PATH, etc.) is available. Prompt is passed via
+/// env var to avoid shell escaping issues with quotes and special characters.
 #[tauri::command]
 pub async fn run_claude(
     prompt: String,
@@ -26,11 +22,8 @@ pub async fn run_claude(
         return Err(JaibberError::Other("project_dir must not be empty".into()));
     }
 
-    // Escape any single-quotes in the prompt so it's safe inside bash -c '...'
-    let safe_prompt = prompt.replace('\'', "'\''");
-
-    let bash_cmd = format!(
-        r#"export NVM_DIR="$HOME/.nvm"
+    // Pass prompt via env var to avoid all shell escaping issues.
+    let bash_cmd = r#"export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 [ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc" 2>/dev/null
 [ -f "$HOME/.profile" ] && . "$HOME/.profile" 2>/dev/null
@@ -40,13 +33,13 @@ export PATH="$PATH:/usr/local/bin:/usr/bin"
 for _d in "$HOME/AppData/Roaming/Claude/claude-code"/*/; do
   [ -d "$_d" ] && export PATH="$PATH:$_d"
 done
-claude --print --dangerously-skip-permissions '{safe_prompt}'"#
-    );
+claude --print --dangerously-skip-permissions "$JAIBBER_PROMPT""#;
 
     let mut cmd = tokio::process::Command::new("bash");
     cmd.arg("-c")
-       .arg(&bash_cmd)
+       .arg(bash_cmd)
        .current_dir(&project_dir)
+       .env("JAIBBER_PROMPT", &prompt)
        .stdout(std::process::Stdio::piped())
        .stderr(std::process::Stdio::piped());
 
@@ -146,35 +139,38 @@ pub async fn run_claude_stream(
     }
     full_prompt.push_str(&prompt);
 
-    let safe_prompt = full_prompt.replace('\'', "'\''");
-    let safe_system = system_prompt.replace('\'', "'\''");
-
-    // Build claude command with stream-json output for real-time streaming.
-    // --append-system-prompt passes agent instructions as a proper system prompt.
-    let system_flag = if !safe_system.is_empty() {
-        format!("--append-system-prompt '{safe_system}' ")
-    } else {
-        String::new()
-    };
-
-    let bash_cmd = format!(
+    // Pass prompt and system prompt via env vars to avoid all shell escaping issues.
+    // Double-quoted "$VAR" in bash expands without further interpretation.
+    let bash_cmd = if system_prompt.is_empty() {
         r#"export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 [ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc" 2>/dev/null
 [ -f "$HOME/.profile" ] && . "$HOME/.profile" 2>/dev/null
 [ -f "$HOME/.zshrc" ] && . "$HOME/.zshrc" 2>/dev/null
 export PATH="$PATH:/usr/local/bin:/usr/bin"
-# Windows: add Claude Code install dir (version-agnostic glob)
 for _d in "$HOME/AppData/Roaming/Claude/claude-code"/*/; do
   [ -d "$_d" ] && export PATH="$PATH:$_d"
 done
-claude --print --output-format stream-json --include-partial-messages {system_flag}--dangerously-skip-permissions '{safe_prompt}'"#
-    );
+claude --print --output-format stream-json --include-partial-messages --dangerously-skip-permissions "$JAIBBER_PROMPT""#.to_string()
+    } else {
+        r#"export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc" 2>/dev/null
+[ -f "$HOME/.profile" ] && . "$HOME/.profile" 2>/dev/null
+[ -f "$HOME/.zshrc" ] && . "$HOME/.zshrc" 2>/dev/null
+export PATH="$PATH:/usr/local/bin:/usr/bin"
+for _d in "$HOME/AppData/Roaming/Claude/claude-code"/*/; do
+  [ -d "$_d" ] && export PATH="$PATH:$_d"
+done
+claude --print --output-format stream-json --include-partial-messages --append-system-prompt "$JAIBBER_SYSTEM" --dangerously-skip-permissions "$JAIBBER_PROMPT""#.to_string()
+    };
 
     let mut cmd = tokio::process::Command::new("bash");
     cmd.arg("-c")
        .arg(&bash_cmd)
        .current_dir(&project_dir)
+       .env("JAIBBER_PROMPT", &full_prompt)
+       .env("JAIBBER_SYSTEM", &system_prompt)
        .stdout(std::process::Stdio::piped())
        .stderr(std::process::Stdio::piped());
 
