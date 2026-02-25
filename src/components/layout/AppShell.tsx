@@ -1,16 +1,13 @@
 import { useState, useEffect } from "react";
 import { ContactList } from "@/components/contacts/ContactList";
 import { ChatWindow } from "@/components/chat/ChatWindow";
-import { SettingsPage } from "@/components/settings/SettingsPage";
-import { ProjectsPanel } from "@/components/projects/ProjectsPanel";
-import { AdminConsole } from "@/components/admin/AdminConsole";
-import { BillingPage } from "@/components/billing/BillingPage";
+import { SettingsPane } from "@/components/settings/SettingsPane";
 import { useAbly } from "@/hooks/useAbly";
 import { useOrgStore } from "@/stores/orgStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
 
-type RightPanel = "chat" | "settings" | "projects" | "admin" | "billing";
+type AppView = "main" | "settings";
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -24,13 +21,9 @@ function useIsMobile() {
 
 export function AppShell() {
   const [activeContactId, setActiveContactId] = useState<string | null>(null);
-  const [rightPanel, setRightPanel] = useState<RightPanel>("chat");
+  const [view, setView] = useState<AppView>("main");
   const [showSidebar, setShowSidebar] = useState(true);
   const isMobile = useIsMobile();
-
-  // Check org role for admin/billing visibility
-  const activeOrg = useOrgStore((s) => s.orgs.find((o) => o.id === s.activeOrgId));
-  const canAccessAdmin = activeOrg?.role === "owner" || activeOrg?.role === "admin";
 
   // Initialize Ably connection + presence + project channel listeners
   useAbly();
@@ -47,86 +40,13 @@ export function AppShell() {
   // On mobile, selecting a contact hides the sidebar
   const handleSelectContact = (id: string) => {
     setActiveContactId(id);
-    setRightPanel("chat");
     if (isMobile) setShowSidebar(false);
   };
 
-  const handleBack = () => {
-    if (isMobile) {
-      setShowSidebar(true);
-    }
-    setRightPanel("chat");
-  };
-
-  const handleOpenPanel = (panel: RightPanel) => {
-    setRightPanel(panel);
-    if (isMobile) setShowSidebar(false);
-  };
-
-  const BackButton = () => (
-    <div className="flex items-center gap-3 px-6 pt-6 pb-2">
-      <button
-        onClick={handleBack}
-        className="text-xs text-muted-foreground hover:text-foreground transition-colors min-h-[44px] min-w-[44px] flex items-center"
-      >
-        ← Back
-      </button>
-    </div>
-  );
-
-  const renderRightPanel = () => {
-    switch (rightPanel) {
-      case "settings":
-        return (
-          <div className="flex flex-col h-full overflow-y-auto">
-            <BackButton />
-            <SettingsPage />
-          </div>
-        );
-      case "projects":
-        return (
-          <div className="flex flex-col h-full overflow-y-auto">
-            <BackButton />
-            <ProjectsPanel />
-          </div>
-        );
-      case "admin":
-        return (
-          <div className="flex flex-col h-full overflow-y-auto">
-            <BackButton />
-            <AdminConsole />
-          </div>
-        );
-      case "billing":
-        return (
-          <div className="flex flex-col h-full overflow-y-auto">
-            <BackButton />
-            <BillingPage />
-          </div>
-        );
-      case "chat":
-      default:
-        if (activeContactId) {
-          return (
-            <ChatWindow
-              contactId={activeContactId}
-              onBack={isMobile ? () => setShowSidebar(true) : undefined}
-            />
-          );
-        }
-        return (
-          <div className="flex flex-col items-center justify-center h-full text-center gap-3 p-6">
-            <div className="text-5xl">&#x1F4AC;</div>
-            <h2 className="text-xl font-semibold text-foreground">
-              Select a project to chat
-            </h2>
-            <p className="text-sm text-muted-foreground max-w-xs">
-              Projects you have access to appear in the sidebar. Use the folder icon to register this machine as a responder.
-            </p>
-          </div>
-        );
-    }
-  };
+  // Settings view takes over the entire screen
+  if (view === "settings") {
+    return <SettingsPane onClose={() => setView("main")} />;
+  }
 
   // Mobile: show either sidebar or content, not both
   if (isMobile) {
@@ -136,14 +56,18 @@ export function AppShell() {
           <ContactList
             activeId={activeContactId}
             onSelect={handleSelectContact}
-            onOpenSettings={() => handleOpenPanel("settings")}
-            onOpenProjects={() => handleOpenPanel("projects")}
-            onOpenAdmin={canAccessAdmin ? () => handleOpenPanel("admin") : undefined}
-            onOpenBilling={canAccessAdmin ? () => handleOpenPanel("billing") : undefined}
+            onOpenSettings={() => setView("settings")}
           />
         ) : (
           <div className="flex-1 flex flex-col overflow-hidden">
-            {renderRightPanel()}
+            {activeContactId ? (
+              <ChatWindow
+                contactId={activeContactId}
+                onBack={() => setShowSidebar(true)}
+              />
+            ) : (
+              <EmptyState />
+            )}
           </div>
         )}
       </div>
@@ -157,15 +81,30 @@ export function AppShell() {
         <ContactList
           activeId={activeContactId}
           onSelect={handleSelectContact}
-          onOpenSettings={() => setRightPanel("settings")}
-          onOpenProjects={() => setRightPanel("projects")}
-          onOpenAdmin={canAccessAdmin ? () => setRightPanel("admin") : undefined}
-          onOpenBilling={canAccessAdmin ? () => setRightPanel("billing") : undefined}
+          onOpenSettings={() => setView("settings")}
         />
       </div>
       <div className="flex-1 flex flex-col overflow-hidden">
-        {renderRightPanel()}
+        {activeContactId ? (
+          <ChatWindow contactId={activeContactId} />
+        ) : (
+          <EmptyState />
+        )}
       </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-center gap-3 p-6">
+      <div className="text-5xl">&#x1F4AC;</div>
+      <h2 className="text-xl font-semibold text-foreground">
+        Select a project to chat
+      </h2>
+      <p className="text-sm text-muted-foreground max-w-xs">
+        Projects you have access to appear in the sidebar. Open Settings to register this machine as a responder.
+      </p>
     </div>
   );
 }
