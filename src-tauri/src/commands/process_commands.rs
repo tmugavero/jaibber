@@ -151,7 +151,7 @@ export PATH="$PATH:/usr/local/bin:/usr/bin"
 for _d in "$HOME/AppData/Roaming/Claude/claude-code"/*/; do
   [ -d "$_d" ] && export PATH="$PATH:$_d"
 done
-claude --print --output-format stream-json --include-partial-messages --dangerously-skip-permissions "$JAIBBER_PROMPT""#.to_string()
+claude --print --verbose --output-format stream-json --dangerously-skip-permissions "$JAIBBER_PROMPT""#.to_string()
     } else {
         r#"export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
@@ -162,7 +162,7 @@ export PATH="$PATH:/usr/local/bin:/usr/bin"
 for _d in "$HOME/AppData/Roaming/Claude/claude-code"/*/; do
   [ -d "$_d" ] && export PATH="$PATH:$_d"
 done
-claude --print --output-format stream-json --include-partial-messages --append-system-prompt "$JAIBBER_SYSTEM" --dangerously-skip-permissions "$JAIBBER_PROMPT""#.to_string()
+claude --print --verbose --output-format stream-json --append-system-prompt "$JAIBBER_SYSTEM" --dangerously-skip-permissions "$JAIBBER_PROMPT""#.to_string()
     };
 
     let mut cmd = tokio::process::Command::new("bash");
