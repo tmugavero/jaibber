@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { openUrl, saveSettings } from "@/lib/platform";
+import { openUrl, saveSettings, storage } from "@/lib/platform";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { cn } from "@/lib/cn";
@@ -46,6 +46,7 @@ export function LoginScreen({ onLogin }: Props) {
         return;
       }
       useAuthStore.getState().setAuth(data.token, data.userId, data.username);
+      await storage.set("auth", { token: data.token, userId: data.userId, username: data.username });
       const updatedSettings = { ...useSettingsStore.getState().settings, apiBaseUrl };
       useSettingsStore.getState().setSettings(updatedSettings);
       await saveSettings(updatedSettings);
@@ -112,6 +113,7 @@ export function LoginScreen({ onLogin }: Props) {
         return;
       }
       useAuthStore.getState().setAuth(trimmed, data.userId, data.username);
+      await storage.set("auth", { token: trimmed, userId: data.userId, username: data.username });
       const updatedSettings = { ...useSettingsStore.getState().settings, apiBaseUrl };
       useSettingsStore.getState().setSettings(updatedSettings);
       await saveSettings(updatedSettings);
