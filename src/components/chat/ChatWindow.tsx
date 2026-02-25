@@ -39,10 +39,12 @@ export function ChatWindow({ contactId, onBack }: Props) {
 
   const msgCount = messages?.length ?? 0;
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom on new messages and during streaming (chunk appends)
+  const lastMsg = messages?.[messages.length - 1];
+  const scrollTrigger = lastMsg ? `${lastMsg.id}:${lastMsg.text.length}:${lastMsg.status}` : "";
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [msgCount]);
+  }, [scrollTrigger]);
 
   // Load project members when info panel opens
   useEffect(() => {
