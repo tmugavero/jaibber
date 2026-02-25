@@ -220,7 +220,8 @@ function subscribeToProjectChannel(
 
   const syncAgents = () => {
     channel.presence.get().then((members) => {
-      const remoteAgents = members.filter((m) => !isOwnConnection(m) && isAgentMember(m));
+      const allAgents = members.filter((m) => isAgentMember(m));
+      const remoteAgents = allAgents.filter((m) => !isOwnConnection(m));
       const agentInfos: AgentInfo[] = remoteAgents.map((m) => ({
         connectionId: m.connectionId ?? "",
         agentName: m.data?.agentName ?? "Agent",
@@ -228,18 +229,16 @@ function subscribeToProjectChannel(
         agentInstructions: m.data?.agentInstructions,
       }));
       useContactStore.getState().setOnlineAgents(contact.id, agentInfos);
-      useContactStore.getState().setOnline(contact.id, remoteAgents.length > 0);
+      useContactStore.getState().setOnline(contact.id, allAgents.length > 0);
     }).catch(() => {});
   };
 
   channel.presence.subscribe("enter", (member) => {
-    if (isOwnConnection(member)) return;
     if (!isAgentMember(member)) return;
     syncAgents();
   });
 
   channel.presence.subscribe("update", (member) => {
-    if (isOwnConnection(member)) return;
     if (!isAgentMember(member)) return;
     syncAgents();
   });
