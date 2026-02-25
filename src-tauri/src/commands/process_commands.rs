@@ -189,6 +189,7 @@ claude --print --output-format stream-json --include-partial-messages {system_fl
 
     let stdout = child.stdout.take()
         .ok_or_else(|| JaibberError::Shell("Failed to capture stdout".into()))?;
+    let stderr_pipe = child.stderr.take();
 
     let rid = response_id.clone();
     let win = window.clone();
@@ -196,6 +197,21 @@ claude --print --output-format stream-json --include-partial-messages {system_fl
     // Spawn a background task to read stream-json lines and emit chunks
     tokio::spawn(async move {
         use tokio::time::{timeout, Duration};
+
+        // Collect stderr in parallel so we can include it in error messages
+        let stderr_handle = stderr_pipe.map(|pipe| {
+            tokio::spawn(async move {
+                let mut buf = String::new();
+                let reader = BufReader::new(pipe);
+                let mut lines = reader.lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    buf.push_str(&line);
+                    buf.push('\n');
+                    if buf.len() > 4000 { break; } // cap stderr collection
+                }
+                buf
+            })
+        });
 
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
@@ -244,6 +260,12 @@ claude --print --output-format stream-json --include-partial-messages {system_fl
             }
         }
 
+        // Collect stderr for error reporting
+        let stderr_text = match stderr_handle {
+            Some(handle) => handle.await.unwrap_or_default(),
+            None => String::new(),
+        };
+
         // Wait for exit status with a 30-second timeout
         match timeout(Duration::from_secs(30), child.wait()).await {
             Ok(Ok(status)) => {
@@ -256,11 +278,16 @@ claude --print --output-format stream-json --include-partial-messages {system_fl
                     }));
                 } else {
                     let code = status.code().map(|c| c.to_string()).unwrap_or_else(|| "?".into());
+                    let err_detail = if stderr_text.trim().is_empty() {
+                        format!("claude exited with code {code}")
+                    } else {
+                        format!("claude exited with code {code}\n{}", stderr_text.trim())
+                    };
                     let _ = win.emit("claude-chunk", serde_json::json!({
                         "responseId": rid,
                         "chunk": "",
                         "done": false,
-                        "error": format!("claude exited with code {code}"),
+                        "error": err_detail,
                     }));
                 }
             }
