@@ -76,6 +76,10 @@ export function ApiKeysSection() {
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedSnippet, setCopiedSnippet] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [expandedKeyId, setExpandedKeyId] = useState<string | null>(null);
+  const [detailSnippetTab, setDetailSnippetTab] = useState<"curl" | "python" | "node">("curl");
+  const [copiedDetailSnippet, setCopiedDetailSnippet] = useState(false);
+  const [deletingKeyId, setDeletingKeyId] = useState<string | null>(null);
   const [guideTab, setGuideTab] = useState<"agent" | "integration">("agent");
   const [copiedGuide, setCopiedGuide] = useState(false);
 
@@ -141,6 +145,31 @@ export function ApiKeysSection() {
       headers: { Authorization: `Bearer ${token}` },
     });
     await fetchKeys();
+  };
+
+  const handleDelete = async (keyId: string) => {
+    if (!activeOrgId || !token) return;
+    setDeletingKeyId(keyId);
+    try {
+      await fetch(`${apiBaseUrl}/api/orgs/${activeOrgId}/api-keys/${keyId}?permanent=true`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (expandedKeyId === keyId) setExpandedKeyId(null);
+      await fetchKeys();
+    } finally {
+      setDeletingKeyId(null);
+    }
+  };
+
+  const buildSnippets = (prefix: string) => {
+    const keyPlaceholder = `${prefix}...`;
+    const projectPlaceholder = "{PROJECT_ID}";
+    return {
+      curl: `curl -X POST ${apiBaseUrl}/api/projects/${projectPlaceholder}/messages \\\n  -H 'X-API-Key: ${keyPlaceholder}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{"text": "Hello from my agent"}'`,
+      python: `import requests\n\nresponse = requests.post(\n    '${apiBaseUrl}/api/projects/${projectPlaceholder}/messages',\n    headers={'X-API-Key': '${keyPlaceholder}'},\n    json={'text': 'Hello from my agent'}\n)`,
+      node: `const response = await fetch(\n  '${apiBaseUrl}/api/projects/${projectPlaceholder}/messages',\n  {\n    method: 'POST',\n    headers: { 'X-API-Key': '${keyPlaceholder}', 'Content-Type': 'application/json' },\n    body: JSON.stringify({ text: 'Hello from my agent' })\n  }\n);`,
+    };
   };
 
   const copyToClipboard = async (text: string, type: "key" | "snippet") => {
@@ -552,44 +581,138 @@ export function ApiKeysSection() {
               </tr>
             </thead>
             <tbody>
-              {keys.map((k) => (
-                <tr key={k.id} className="border-b border-border last:border-0">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-foreground">{k.name}</div>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {k.scopes.map((s) => (
-                        <span key={s} className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{k.prefix}...</td>
-                  <td className="px-4 py-3">
-                    <span className={cn(
-                      "px-2 py-0.5 rounded-full text-[10px] font-semibold",
-                      k.status === "active" && "bg-emerald-500/10 text-emerald-500",
-                      k.status === "expired" && "bg-amber-500/10 text-amber-500",
-                      k.status === "revoked" && "bg-destructive/10 text-destructive",
-                    )}>
-                      {k.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">
-                    {relativeTime(k.lastUsedAt)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {k.status === "active" && (
-                      <button
-                        onClick={() => handleRevoke(k.id)}
-                        className="text-xs text-destructive hover:text-destructive/80 transition-colors"
+              {keys.map((k) => {
+                const isExpanded = expandedKeyId === k.id;
+                const snippets = buildSnippets(k.prefix);
+                return (
+                  <tr key={k.id} className="border-b border-border last:border-0">
+                    <td colSpan={5} className="p-0">
+                      {/* Main row */}
+                      <div
+                        className="flex items-center cursor-pointer hover:bg-muted/10 transition-colors"
+                        onClick={() => setExpandedKeyId(isExpanded ? null : k.id)}
                       >
-                        Revoke
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                        <div className="px-4 py-3 flex-1 min-w-0">
+                          <div className="font-medium text-foreground">{k.name}</div>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {k.scopes.map((s) => (
+                              <span key={s} className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="px-4 py-3 font-mono text-xs text-muted-foreground whitespace-nowrap">{k.prefix}...</div>
+                        <div className="px-4 py-3">
+                          <span className={cn(
+                            "px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap",
+                            k.status === "active" && "bg-emerald-500/10 text-emerald-500",
+                            k.status === "expired" && "bg-amber-500/10 text-amber-500",
+                            k.status === "revoked" && "bg-destructive/10 text-destructive",
+                          )}>
+                            {k.status}
+                          </span>
+                        </div>
+                        <div className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                          {relativeTime(k.lastUsedAt)}
+                        </div>
+                        <div className="px-4 py-3 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          {k.status === "active" && (
+                            <button
+                              onClick={() => handleRevoke(k.id)}
+                              className="text-xs text-destructive hover:text-destructive/80 transition-colors"
+                            >
+                              Revoke
+                            </button>
+                          )}
+                          {k.status === "revoked" && (
+                            <button
+                              onClick={() => handleDelete(k.id)}
+                              disabled={deletingKeyId === k.id}
+                              className="text-xs text-destructive hover:text-destructive/80 transition-colors disabled:opacity-50"
+                            >
+                              {deletingKeyId === k.id ? "Deleting..." : "Delete"}
+                            </button>
+                          )}
+                          <svg
+                            width="14" height="14" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                            className={cn("text-muted-foreground transition-transform", isExpanded && "rotate-180")}
+                          >
+                            <path d="M6 9l6 6 6-6" />
+                          </svg>
+                        </div>
+                      </div>
+
+                      {/* Expanded detail */}
+                      {isExpanded && (
+                        <div className="border-t border-border bg-muted/5 px-4 py-4 space-y-4">
+                          <div className="grid grid-cols-2 gap-4 text-xs">
+                            <div>
+                              <span className="text-muted-foreground">Created</span>
+                              <div className="text-foreground mt-0.5">{new Date(k.createdAt).toLocaleDateString()}</div>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Rate limit</span>
+                              <div className="text-foreground mt-0.5">{k.rateLimitRpm} RPM</div>
+                            </div>
+                            {k.expiresAt && (
+                              <div>
+                                <span className="text-muted-foreground">Expires</span>
+                                <div className="text-foreground mt-0.5">{new Date(k.expiresAt).toLocaleDateString()}</div>
+                              </div>
+                            )}
+                            {k.revokedAt && (
+                              <div>
+                                <span className="text-muted-foreground">Revoked</span>
+                                <div className="text-foreground mt-0.5">{new Date(k.revokedAt).toLocaleDateString()}</div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Code snippets with prefix placeholder */}
+                          <div>
+                            <div className="text-xs font-medium text-muted-foreground mb-2">
+                              Code snippets <span className="text-[10px] font-normal">(replace {k.prefix}... with your full key)</span>
+                            </div>
+                            <div className="flex gap-1 mb-2">
+                              {(["curl", "python", "node"] as const).map((t) => (
+                                <button
+                                  key={t}
+                                  onClick={() => setDetailSnippetTab(t)}
+                                  className={cn(
+                                    "px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
+                                    detailSnippetTab === t
+                                      ? "bg-muted text-foreground"
+                                      : "text-muted-foreground hover:text-foreground",
+                                  )}
+                                >
+                                  {t === "curl" ? "cURL" : t === "python" ? "Python" : "Node.js"}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="relative">
+                              <pre className="bg-muted/60 rounded-lg p-3 text-xs font-mono text-foreground overflow-x-auto whitespace-pre-wrap">
+                                {snippets[detailSnippetTab]}
+                              </pre>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(snippets[detailSnippetTab]);
+                                  setCopiedDetailSnippet(true);
+                                  setTimeout(() => setCopiedDetailSnippet(false), 2000);
+                                }}
+                                className="absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-medium bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
+                              >
+                                {copiedDetailSnippet ? "Copied!" : "Copy"}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
