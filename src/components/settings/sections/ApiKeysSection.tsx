@@ -40,9 +40,9 @@ const PRESET_LABELS: Record<Preset, string> = {
 };
 
 const PRESET_DESCRIPTIONS: Record<Preset, string> = {
-  "read-only": "Monitoring and dashboards",
-  "agent-operator": "Headless agents sending messages",
-  "full-access": "Admin automation and management",
+  "read-only": "Read message history and agent status (dashboards, monitoring)",
+  "agent-operator": "Send and read messages (AI agents, CI pipelines, webhooks)",
+  "full-access": "Full control including agent management (admin automation)",
 };
 
 function relativeTime(dateStr: string | null): string {
@@ -84,6 +84,11 @@ export function ApiKeysSection() {
     () => Object.values(contacts).filter((c) => c.orgId === activeOrgId),
     [contacts, activeOrgId],
   );
+  const orphanedProjects = useMemo(
+    () => Object.values(contacts).filter((c) => !c.orgId),
+    [contacts],
+  );
+  const [movingProjectId, setMovingProjectId] = useState<string | null>(null);
 
   const fetchKeys = useCallback(async () => {
     if (!activeOrgId || !token) return;
@@ -146,6 +151,27 @@ export function ApiKeysSection() {
     } else {
       setCopiedSnippet(true);
       setTimeout(() => setCopiedSnippet(false), 2000);
+    }
+  };
+
+  const handleMoveToOrg = async (projectId: string) => {
+    if (!activeOrgId || !token) return;
+    setMovingProjectId(projectId);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/projects/${projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ orgId: activeOrgId }),
+      });
+      if (res.ok) {
+        // Update the contact in store with the new orgId
+        const contact = contacts[projectId];
+        if (contact) {
+          useContactStore.getState().upsertContact({ ...contact, orgId: activeOrgId });
+        }
+      }
+    } finally {
+      setMovingProjectId(null);
     }
   };
 
@@ -382,6 +408,33 @@ export function ApiKeysSection() {
                 <div key={p.id} className="flex items-center gap-2 text-xs">
                   <span className="text-foreground font-medium truncate max-w-[140px]">{p.name}</span>
                   <code className="text-muted-foreground font-mono text-[10px] truncate flex-1">{p.id}</code>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Orphaned projects */}
+        {orphanedProjects.length > 0 && (
+          <div className="border border-amber-500/30 bg-amber-500/5 rounded-xl p-5 space-y-3">
+            <div className="text-xs font-medium text-amber-500">
+              Projects not in any org ({orphanedProjects.length})
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              These projects can't be accessed via API key. Move them into this org to use them with your keys.
+            </p>
+            <div className="space-y-2">
+              {orphanedProjects.map((p) => (
+                <div key={p.id} className="flex items-center gap-2 text-xs">
+                  <span className="text-foreground font-medium truncate max-w-[140px]">{p.name}</span>
+                  <code className="text-muted-foreground font-mono text-[10px] truncate flex-1">{p.id}</code>
+                  <button
+                    onClick={() => handleMoveToOrg(p.id)}
+                    disabled={movingProjectId === p.id}
+                    className="flex-shrink-0 text-[11px] text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
+                  >
+                    {movingProjectId === p.id ? "Moving..." : "Move to org"}
+                  </button>
                 </div>
               ))}
             </div>
