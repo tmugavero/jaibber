@@ -7,6 +7,7 @@ import { ProjectsSection } from "./sections/ProjectsSection";
 import { OrganizationSection } from "./sections/OrganizationSection";
 import { BillingSection } from "./sections/BillingSection";
 import { AnalyticsSection } from "./sections/AnalyticsSection";
+import { ApiKeysSection } from "./sections/ApiKeysSection";
 import { cn } from "@/lib/cn";
 
 type Section =
@@ -14,6 +15,7 @@ type Section =
   | "security"
   | "projects"
   | "organization"
+  | "api-keys"
   | "billing"
   | "analytics";
 
@@ -29,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "security", label: "Security" },
   { id: "projects", label: "Projects" },
   { id: "organization", label: "Organization" },
+  { id: "api-keys", label: "API Keys", adminOnly: true },
   { id: "billing", label: "Billing", adminOnly: true },
   { id: "analytics", label: "Analytics", adminOnly: true },
 ];
@@ -82,6 +85,7 @@ export function SettingsPane({ onClose, initialSection = "general" }: Props) {
       case "security": return <SecuritySection />;
       case "projects": return <ProjectsSection />;
       case "organization": return <OrganizationSection />;
+      case "api-keys": return <ApiKeysSection />;
       case "billing": return <BillingSection />;
       case "analytics": return <AnalyticsSection />;
     }
