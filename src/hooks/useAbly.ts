@@ -9,7 +9,9 @@ import { useProjectStore, type LocalProject } from "@/stores/projectStore";
 import { runAgentStream, listenEvent, isTauri } from "@/lib/platform";
 import { parseMentions } from "@/lib/mentions";
 import { persistMessage } from "@/lib/messageApi";
+import { useTaskStore } from "@/stores/taskStore";
 import type { AblyMessage, ExecutionMode } from "@/types/message";
+import type { Task } from "@/types/task";
 import type { Contact, AgentInfo } from "@/types/contact";
 import type * as Ably from "ably";
 
@@ -377,6 +379,20 @@ function subscribeToProjectChannel(
           }
         }
       }
+    }
+  });
+
+  // Subscribe to task events on this project channel
+  channel.subscribe("task", (msg) => {
+    const data = msg.data as { type: string; task: Task; projectId: string };
+    if (!data?.task || data.projectId !== contact.id) return;
+
+    if (data.type === "task-created") {
+      useTaskStore.getState().addTask(data.task);
+    } else if (data.type === "task-updated") {
+      useTaskStore.getState().updateTask(data.task.id, data.task);
+    } else if (data.type === "task-deleted") {
+      useTaskStore.getState().removeTask(data.task.id);
     }
   });
 

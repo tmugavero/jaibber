@@ -9,7 +9,8 @@ import { MessageInput } from "./MessageInput";
 import { sendMessage } from "@/hooks/useAbly";
 import { getAbly } from "@/lib/ably";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import type { ExecutionMode } from "@/types/message";
+import { TaskListPanel } from "@/components/tasks/TaskListPanel";
+import type { ExecutionMode, Message } from "@/types/message";
 
 interface ProjectMember {
   userId: string;
@@ -39,8 +40,13 @@ export function ChatWindow({ contactId, onBack }: Props) {
   const [copiedProjectId, setCopiedProjectId] = useState(false);
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("auto");
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [activeTab, setActiveTab] = useState<"chat" | "tasks">("chat");
+  const [createFromMessage, setCreateFromMessage] = useState<{ title: string; description: string; sourceMessageId: string } | null>(null);
 
   const msgCount = messages?.length ?? 0;
+
+  // Reset tab when switching projects
+  useEffect(() => { setActiveTab("chat"); }, [contactId]);
 
   // Auto-scroll to bottom on new messages and during streaming (chunk appends)
   const lastMsg = messages?.[messages.length - 1];
@@ -148,6 +154,16 @@ export function ChatWindow({ contactId, onBack }: Props) {
     setTimeout(() => setCopiedProjectId(false), 2000);
   };
 
+  const handleCreateTask = (msg: Message) => {
+    const firstLine = msg.text.split("\n")[0].slice(0, 100);
+    setCreateFromMessage({
+      title: firstLine,
+      description: msg.text,
+      sourceMessageId: msg.id,
+    });
+    setActiveTab("tasks");
+  };
+
   const hasStreamingFromThem = messages?.some(
     (m) => m.sender === "them" && m.status === "streaming"
   ) ?? false;
@@ -192,6 +208,30 @@ export function ChatWindow({ contactId, onBack }: Props) {
                   : "offline"}
             </div>
           </div>
+          {/* Chat / Tasks tab toggle */}
+          <div className="flex bg-muted/40 rounded-lg p-0.5 text-[11px]">
+            <button
+              onClick={() => setActiveTab("chat")}
+              className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                activeTab === "chat"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Chat
+            </button>
+            <button
+              onClick={() => setActiveTab("tasks")}
+              className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                activeTab === "tasks"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Tasks
+            </button>
+          </div>
+
           <button
             onClick={() => setShowInfo(!showInfo)}
             className={`text-xs transition-colors px-2 py-1 rounded ${
@@ -349,58 +389,68 @@ export function ChatWindow({ contactId, onBack }: Props) {
         )}
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-0.5">
-        {loadingHistory && (
-          <div className="text-center text-xs text-muted-foreground py-2 animate-pulse">
-            Loading history...
-          </div>
-        )}
-        {msgCount === 0 && !loadingHistory && (
-          <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-            Send a message to start the conversation
-          </div>
-        )}
-        {messages?.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
-        ))}
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Input */}
-      {contact?.role === "org-admin" ? (
-        <div className="px-4 py-3 border-t border-border text-center text-xs text-muted-foreground">
-          You are viewing this project as an org admin. Join the project to participate.
-        </div>
-      ) : (
+      {activeTab === "chat" ? (
         <>
-          <MessageInput onSend={handleSend} disabled={hasStreamingFromThem} />
-          {/* Plan / Auto mode toggle — below input, like Claude Code */}
-          <div className="flex items-center pb-2 pt-0" style={{ paddingLeft: "3.75rem" }}>
-            <div className="flex bg-muted/40 rounded-lg p-0.5 text-[11px]">
-              <button
-                onClick={() => setExecutionMode("plan")}
-                className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
-                  executionMode === "plan"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Plan
-              </button>
-              <button
-                onClick={() => setExecutionMode("auto")}
-                className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
-                  executionMode === "auto"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Auto
-              </button>
-            </div>
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-0.5">
+            {loadingHistory && (
+              <div className="text-center text-xs text-muted-foreground py-2 animate-pulse">
+                Loading history...
+              </div>
+            )}
+            {msgCount === 0 && !loadingHistory && (
+              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                Send a message to start the conversation
+              </div>
+            )}
+            {messages?.map((msg) => (
+              <MessageBubble key={msg.id} message={msg} onCreateTask={handleCreateTask} />
+            ))}
+            <div ref={bottomRef} />
           </div>
+
+          {/* Input */}
+          {contact?.role === "org-admin" ? (
+            <div className="px-4 py-3 border-t border-border text-center text-xs text-muted-foreground">
+              You are viewing this project as an org admin. Join the project to participate.
+            </div>
+          ) : (
+            <>
+              <MessageInput onSend={handleSend} disabled={hasStreamingFromThem} />
+              {/* Plan / Auto mode toggle — below input, like Claude Code */}
+              <div className="flex items-center pb-2 pt-0" style={{ paddingLeft: "3.75rem" }}>
+                <div className="flex bg-muted/40 rounded-lg p-0.5 text-[11px]">
+                  <button
+                    onClick={() => setExecutionMode("plan")}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                      executionMode === "plan"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Plan
+                  </button>
+                  <button
+                    onClick={() => setExecutionMode("auto")}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                      executionMode === "auto"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Auto
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </>
+      ) : (
+        <TaskListPanel
+          projectId={contactId}
+          createFromMessage={createFromMessage}
+          onCreateFromMessageHandled={() => setCreateFromMessage(null)}
+        />
       )}
       <ConfirmDialog
         open={showClearConfirm}
