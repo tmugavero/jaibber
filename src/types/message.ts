@@ -26,4 +26,6 @@ export interface AblyMessage {
   isAgentMessage?: boolean;     // true if this message was sent by an agent (not a human)
   responseDepth?: number;       // 0 for human messages, +1 for each agent response in a chain
   respondingChain?: string[];   // agentNames that have already responded in this chain
+  // Task notifications — informational messages that should not trigger agent responses
+  isTaskNotification?: boolean;
 }

@@ -310,7 +310,6 @@ function subscribeToProjectChannel(
 
     if (isTaskEvent) {
       const data = msg.data as { type: string; task: Task; projectId: string };
-      console.log("[task-event]", { msgName: msg.name, dataType: data?.type, status: data?.task?.status, assignedAgent: data?.task?.assignedAgentName, projectId: data?.projectId, contactId: contact.id, isTauri });
       if (!data?.task || data.projectId !== contact.id) return;
 
       if (data.type === "task-created") {
@@ -331,7 +330,6 @@ function subscribeToProjectChannel(
         const lp = useProjectStore.getState().projects.find(
           (p) => p.projectId === contact.id
         );
-        console.log("[task-auto-exec]", { localProject: lp?.agentName, assignedAgent: data.task.assignedAgentName, match: lp ? lp.agentName.toLowerCase() === data.task.assignedAgentName.toLowerCase() : "no-lp" });
         if (lp && lp.agentName.toLowerCase() === data.task.assignedAgentName.toLowerCase()) {
           const { token: tkn } = useAuthStore.getState();
           const { apiBaseUrl: base } = useSettingsStore.getState().settings;
@@ -340,6 +338,30 @@ function subscribeToProjectChannel(
           if (tkn && base) {
             updateTask(base, tkn, data.task.id, { status: "working" }).catch(() => {});
           }
+
+          // Announce task pickup in chat so all members see it
+          const notifId = uuidv4();
+          const priorityLabel = data.task.priority !== "medium" ? ` [${data.task.priority}]` : "";
+          const notifText = `Picking up task${priorityLabel}: ${data.task.title}`;
+          useChatStore.getState().addMessage({
+            id: notifId,
+            conversationId: contact.id,
+            sender: "them",
+            senderName: lp.agentName,
+            text: notifText,
+            timestamp: new Date().toISOString(),
+            status: "done",
+          });
+          channel.publish("message", {
+            from: userId,
+            fromUsername: lp.agentName,
+            projectId: contact.id,
+            text: notifText,
+            messageId: notifId,
+            type: "message",
+            agentName: lp.agentName,
+            isTaskNotification: true,
+          } satisfies AblyMessage);
 
           // Build prompt from task title + description
           const taskPrompt = data.task.description
@@ -383,8 +405,8 @@ function subscribeToProjectChannel(
         executionMode: payload.executionMode,
       });
 
-      // Agent response: check if this machine should respond
-      if (isTauri) {
+      // Agent response: check if this machine should respond (skip task notifications)
+      if (isTauri && !payload.isTaskNotification) {
         const lp = useProjectStore.getState().projects.find(
           (p) => p.projectId === contact.id
         );
