@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import { useOrgStore } from "@/stores/orgStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useContactStore } from "@/stores/contactStore";
 import { cn } from "@/lib/cn";
 
 interface ApiKeyRow {
@@ -74,6 +75,15 @@ export function ApiKeysSection() {
   const [error, setError] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedSnippet, setCopiedSnippet] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [guideTab, setGuideTab] = useState<"agent" | "integration">("agent");
+  const [copiedGuide, setCopiedGuide] = useState(false);
+
+  const contacts = useContactStore((s) => s.contacts);
+  const orgProjects = useMemo(
+    () => Object.values(contacts).filter((c) => c.orgId === activeOrgId),
+    [contacts, activeOrgId],
+  );
 
   const fetchKeys = useCallback(async () => {
     if (!activeOrgId || !token) return;
@@ -143,6 +153,52 @@ export function ApiKeysSection() {
 
   // Key just created — show reveal card
   if (createdKey) {
+    const activeSnippet = selectedProjectId
+      ? createdKey.snippets[snippetTab].replace(/\{PROJECT_ID\}/g, selectedProjectId)
+      : createdKey.snippets[snippetTab];
+
+    const projectLabel = selectedProjectId
+      ? orgProjects.find((p) => p.id === selectedProjectId)?.name ?? "project"
+      : "{PROJECT_NAME}";
+
+    const agentGuideText = [
+      `## Jaibber Integration`,
+      ``,
+      `Report progress to the team by posting to the "${projectLabel}" project channel.`,
+      ``,
+      `Endpoint: POST ${apiBaseUrl}/api/projects/${selectedProjectId || "{PROJECT_ID}"}/messages`,
+      ``,
+      `Headers:`,
+      `  X-API-Key: ${createdKey.key}`,
+      `  Content-Type: application/json`,
+      ``,
+      `Body: { "text": "your message", "senderName": "AgentName" }`,
+      ``,
+      `Example using curl:`,
+      `  curl -X POST ${apiBaseUrl}/api/projects/${selectedProjectId || "{PROJECT_ID}"}/messages \\`,
+      `    -H 'X-API-Key: ${createdKey.key}' \\`,
+      `    -H 'Content-Type: application/json' \\`,
+      `    -d '{"text": "Task completed successfully", "senderName": "Agent"}'`,
+      ``,
+      `Use this after completing tasks, encountering errors, or when you need team input.`,
+      `Post concise status updates — the team sees them in real time.`,
+    ].join("\n");
+
+    const handleCopyGuide = async () => {
+      try {
+        await navigator.clipboard.writeText(agentGuideText);
+      } catch {
+        const input = document.createElement("textarea");
+        input.value = agentGuideText;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        document.body.removeChild(input);
+      }
+      setCopiedGuide(true);
+      setTimeout(() => setCopiedGuide(false), 2000);
+    };
+
     return (
       <div className="space-y-6">
         <div>
@@ -182,6 +238,30 @@ export function ApiKeysSection() {
             </div>
           </div>
 
+          {/* Project selector */}
+          {orgProjects.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                Select a project
+              </label>
+              <select
+                value={selectedProjectId}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+              >
+                <option value="">-- Select project --</option>
+                {orgProjects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              {!selectedProjectId && (
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Pick a project to fill in the snippets below with a real project ID.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Code snippets */}
           <div>
             <div className="flex gap-1 mb-2">
@@ -202,10 +282,10 @@ export function ApiKeysSection() {
             </div>
             <div className="relative">
               <pre className="bg-muted/60 rounded-lg p-3 text-xs font-mono text-foreground overflow-x-auto whitespace-pre-wrap">
-                {createdKey.snippets[snippetTab]}
+                {activeSnippet}
               </pre>
               <button
-                onClick={() => copyToClipboard(createdKey.snippets[snippetTab], "snippet")}
+                onClick={() => copyToClipboard(activeSnippet, "snippet")}
                 className="absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-medium bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
               >
                 {copiedSnippet ? "Copied!" : "Copy"}
@@ -213,6 +293,100 @@ export function ApiKeysSection() {
             </div>
           </div>
         </div>
+
+        {/* Quick Start guide */}
+        <div className="border border-border rounded-xl p-5 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground mb-1">Quick Start</h3>
+            <p className="text-xs text-muted-foreground">
+              Choose how you want to use this key.
+            </p>
+          </div>
+
+          <div className="flex gap-1">
+            {(["agent", "integration"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setGuideTab(t)}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
+                  guideTab === t
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {t === "agent" ? "Agent Setup" : "Webhook / Script"}
+              </button>
+            ))}
+          </div>
+
+          {guideTab === "agent" ? (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Paste these instructions into your agent's CLAUDE.md, system prompt, or configuration file.
+                The agent will use the API key to post status updates into the project channel.
+              </p>
+              <div className="relative">
+                <pre className="bg-muted/60 rounded-lg p-3 text-xs font-mono text-foreground overflow-x-auto whitespace-pre-wrap">
+                  {agentGuideText}
+                </pre>
+                <button
+                  onClick={handleCopyGuide}
+                  className="absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-medium bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {copiedGuide ? "Copied!" : "Copy"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Send messages from CI pipelines, monitoring tools, or any HTTP client.
+                Messages appear instantly in the project channel for all members.
+              </p>
+              <div className="text-xs text-muted-foreground space-y-2">
+                <div>
+                  <span className="font-medium text-foreground">Endpoint: </span>
+                  <code className="bg-muted/40 rounded px-1.5 py-0.5 font-mono text-[11px]">
+                    POST {apiBaseUrl}/api/projects/{selectedProjectId || "{PROJECT_ID}"}/messages
+                  </code>
+                </div>
+                <div>
+                  <span className="font-medium text-foreground">Header: </span>
+                  <code className="bg-muted/40 rounded px-1.5 py-0.5 font-mono text-[11px]">
+                    X-API-Key: {createdKey.prefix}...
+                  </code>
+                </div>
+                <div>
+                  <span className="font-medium text-foreground">Body: </span>
+                  <code className="bg-muted/40 rounded px-1.5 py-0.5 font-mono text-[11px]">
+                    {'{ "text": "...", "senderName": "CI Bot" }'}
+                  </code>
+                </div>
+                <p className="text-[11px]">
+                  The <code className="font-mono">senderName</code> field controls who the message appears from (defaults to "API").
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Projects in this org */}
+        {orgProjects.length > 0 && (
+          <div className="border border-border rounded-xl p-5 space-y-3">
+            <div className="text-xs font-medium text-muted-foreground">
+              Projects in this org ({orgProjects.length})
+            </div>
+            <div className="space-y-1.5">
+              {orgProjects.map((p) => (
+                <div key={p.id} className="flex items-center gap-2 text-xs">
+                  <span className="text-foreground font-medium truncate max-w-[140px]">{p.name}</span>
+                  <code className="text-muted-foreground font-mono text-[10px] truncate flex-1">{p.id}</code>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <button
           onClick={() => setCreatedKey(null)}

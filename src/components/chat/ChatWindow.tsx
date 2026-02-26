@@ -35,6 +35,7 @@ export function ChatWindow({ contactId, onBack }: Props) {
   const [addingMember, setAddingMember] = useState(false);
   const [addMemberMsg, setAddMemberMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [copiedProjectId, setCopiedProjectId] = useState(false);
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("auto");
 
   const msgCount = messages?.length ?? 0;
@@ -108,6 +109,21 @@ export function ChatWindow({ contactId, onBack }: Props) {
     sendMessage(contactId, text, executionMode);
   };
 
+  const handleCopyProjectId = async () => {
+    try {
+      await navigator.clipboard.writeText(contactId);
+    } catch {
+      const input = document.createElement("input");
+      input.value = contactId;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+    }
+    setCopiedProjectId(true);
+    setTimeout(() => setCopiedProjectId(false), 2000);
+  };
+
   const hasStreamingFromThem = messages?.some(
     (m) => m.sender === "them" && m.status === "streaming"
   ) ?? false;
@@ -177,6 +193,21 @@ export function ChatWindow({ contactId, onBack }: Props) {
         {/* Collapsible project info panel */}
         {showInfo && (
           <div className="px-5 pb-3.5 space-y-3 border-t border-border/50 pt-3">
+            <div>
+              <div className="text-xs font-medium text-muted-foreground mb-1">Project ID</div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 bg-muted/40 rounded px-2 py-1 text-xs font-mono text-foreground break-all select-all">
+                  {contactId}
+                </code>
+                <button
+                  onClick={handleCopyProjectId}
+                  className="flex-shrink-0 text-xs text-primary hover:text-primary/80 transition-colors"
+                >
+                  {copiedProjectId ? "Copied!" : "Copy"}
+                </button>
+              </div>
+            </div>
+
             {contact?.description && (
               <div>
                 <div className="text-xs font-medium text-muted-foreground mb-1">Description</div>

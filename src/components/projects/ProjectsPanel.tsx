@@ -628,6 +628,7 @@ export function ProjectsPanel() {
         name: p.name,
         description: p.description ?? null,
         ownerId: p.ownerId ?? null,
+        orgId: p.orgId ?? selectedOrgId ?? null,
         ablyChannelName: p.ablyChannelName,
         isOnline: false,
         lastSeen: null,
