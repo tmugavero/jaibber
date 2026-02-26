@@ -9,6 +9,7 @@ import { useProjectStore, type LocalProject } from "@/stores/projectStore";
 import { runAgentStream, listenEvent, isTauri } from "@/lib/platform";
 import { parseMentions } from "@/lib/mentions";
 import { persistMessage } from "@/lib/messageApi";
+import { updateTask } from "@/lib/taskApi";
 import { useTaskStore } from "@/stores/taskStore";
 import type { AblyMessage, ExecutionMode } from "@/types/message";
 import type { Task } from "@/types/task";
@@ -39,7 +40,8 @@ async function respondToMessage(
   promptText: string,
   incomingDepth: number,
   incomingChain: string[],
-  executionMode: ExecutionMode = "auto"
+  executionMode: ExecutionMode = "auto",
+  onComplete?: (success: boolean) => void
 ) {
   const convId = contact.id;
   const nextDepth = incomingDepth + 1;
@@ -138,6 +140,7 @@ async function respondToMessage(
         });
       }
 
+      onComplete?.(true);
       unlisten();
     } else if (event.error) {
       if (flushTimer) clearTimeout(flushTimer);
@@ -167,6 +170,7 @@ async function respondToMessage(
         });
       }
 
+      onComplete?.(false);
       unlisten();
     } else {
       useChatStore.getState().appendChunk(convId, responseId, event.chunk);
@@ -209,6 +213,7 @@ async function respondToMessage(
       type: "error",
       agentName,
     } satisfies AblyMessage);
+    onComplete?.(false);
     unlisten();
   }
 }
@@ -296,8 +301,68 @@ function subscribeToProjectChannel(
     syncAgents();
   });
 
-  // Subscribe to messages on this project channel
+  // Subscribe to all events on this project channel (messages + tasks)
   channel.subscribe(async (msg) => {
+    // Handle task events (published by server with event name "task")
+    // Also detect task events by checking data.type for "task-*" patterns (fallback)
+    const isTaskEvent = msg.name === "task" ||
+      (msg.data && typeof msg.data === "object" && typeof msg.data.type === "string" && msg.data.type.startsWith("task-"));
+
+    if (isTaskEvent) {
+      const data = msg.data as { type: string; task: Task; projectId: string };
+      console.log("[task-event]", { msgName: msg.name, dataType: data?.type, status: data?.task?.status, assignedAgent: data?.task?.assignedAgentName, projectId: data?.projectId, contactId: contact.id, isTauri });
+      if (!data?.task || data.projectId !== contact.id) return;
+
+      if (data.type === "task-created") {
+        useTaskStore.getState().addTask(data.task);
+      } else if (data.type === "task-updated") {
+        useTaskStore.getState().updateTask(data.task.id, data.task);
+      } else if (data.type === "task-deleted") {
+        useTaskStore.getState().removeTask(data.task.id);
+      }
+
+      // Auto-execute: if this task is assigned to a local agent and is "submitted", pick it up
+      if (
+        isTauri &&
+        (data.type === "task-created" || data.type === "task-updated") &&
+        data.task.status === "submitted" &&
+        data.task.assignedAgentName
+      ) {
+        const lp = useProjectStore.getState().projects.find(
+          (p) => p.projectId === contact.id
+        );
+        console.log("[task-auto-exec]", { localProject: lp?.agentName, assignedAgent: data.task.assignedAgentName, match: lp ? lp.agentName.toLowerCase() === data.task.assignedAgentName.toLowerCase() : "no-lp" });
+        if (lp && lp.agentName.toLowerCase() === data.task.assignedAgentName.toLowerCase()) {
+          const { token: tkn } = useAuthStore.getState();
+          const { apiBaseUrl: base } = useSettingsStore.getState().settings;
+
+          // Mark task as "working"
+          if (tkn && base) {
+            updateTask(base, tkn, data.task.id, { status: "working" }).catch(() => {});
+          }
+
+          // Build prompt from task title + description
+          const taskPrompt = data.task.description
+            ? `Task: ${data.task.title}\n\n${data.task.description}`
+            : `Task: ${data.task.title}`;
+
+          respondToMessage(
+            channel, contact, lp, lp.agentName, userId, taskPrompt, 0, [], "auto",
+            (success) => {
+              const { token: t3 } = useAuthStore.getState();
+              const { apiBaseUrl: url3 } = useSettingsStore.getState().settings;
+              if (t3 && url3) {
+                updateTask(url3, t3, data.task.id, {
+                  status: success ? "completed" : "failed",
+                }).catch(() => {});
+              }
+            }
+          );
+        }
+      }
+      return; // Task events handled — don't fall through to message handling
+    }
+
     const payload = msg.data as AblyMessage;
     if (!payload || payload.projectId !== contact.id) return;
 
@@ -379,20 +444,6 @@ function subscribeToProjectChannel(
           }
         }
       }
-    }
-  });
-
-  // Subscribe to task events on this project channel
-  channel.subscribe("task", (msg) => {
-    const data = msg.data as { type: string; task: Task; projectId: string };
-    if (!data?.task || data.projectId !== contact.id) return;
-
-    if (data.type === "task-created") {
-      useTaskStore.getState().addTask(data.task);
-    } else if (data.type === "task-updated") {
-      useTaskStore.getState().updateTask(data.task.id, data.task);
-    } else if (data.type === "task-deleted") {
-      useTaskStore.getState().removeTask(data.task.id);
     }
   });
 
