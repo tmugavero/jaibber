@@ -416,7 +416,7 @@ export function ChatWindow({ contactId, onBack }: Props) {
             </div>
           ) : (
             <>
-              <MessageInput onSend={handleSend} disabled={hasStreamingFromThem} />
+              <MessageInput onSend={handleSend} disabled={hasStreamingFromThem} agents={agents} />
               {/* Plan / Auto mode toggle — below input, like Claude Code */}
               <div className="flex items-center pb-2 pt-0" style={{ paddingLeft: "3.75rem" }}>
                 <div className="flex bg-muted/40 rounded-lg p-0.5 text-[11px]">
