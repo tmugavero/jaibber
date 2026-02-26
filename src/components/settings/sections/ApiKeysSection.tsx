@@ -65,6 +65,7 @@ export function ApiKeysSection() {
   const [keys, setKeys] = useState<ApiKeyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [createdKey, setCreatedKey] = useState<CreatedKey | null>(null);
+  const [viewingKey, setViewingKey] = useState<ApiKeyRow | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [snippetTab, setSnippetTab] = useState<"curl" | "python" | "node">("curl");
 
@@ -76,9 +77,6 @@ export function ApiKeysSection() {
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedSnippet, setCopiedSnippet] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState("");
-  const [expandedKeyId, setExpandedKeyId] = useState<string | null>(null);
-  const [detailSnippetTab, setDetailSnippetTab] = useState<"curl" | "python" | "node">("curl");
-  const [copiedDetailSnippet, setCopiedDetailSnippet] = useState(false);
   const [deletingKeyId, setDeletingKeyId] = useState<string | null>(null);
   const [guideTab, setGuideTab] = useState<"agent" | "integration">("agent");
   const [copiedGuide, setCopiedGuide] = useState(false);
@@ -145,6 +143,8 @@ export function ApiKeysSection() {
       headers: { Authorization: `Bearer ${token}` },
     });
     await fetchKeys();
+    // Update viewing key status
+    setViewingKey((prev) => prev && prev.id === keyId ? { ...prev, status: "revoked", revokedAt: new Date().toISOString() } : prev);
   };
 
   const handleDelete = async (keyId: string) => {
@@ -155,21 +155,11 @@ export function ApiKeysSection() {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (expandedKeyId === keyId) setExpandedKeyId(null);
       await fetchKeys();
+      if (viewingKey?.id === keyId) setViewingKey(null);
     } finally {
       setDeletingKeyId(null);
     }
-  };
-
-  const buildSnippets = (prefix: string) => {
-    const keyPlaceholder = `${prefix}...`;
-    const projectPlaceholder = "{PROJECT_ID}";
-    return {
-      curl: `curl -X POST ${apiBaseUrl}/api/projects/${projectPlaceholder}/messages \\\n  -H 'X-API-Key: ${keyPlaceholder}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{"text": "Hello from my agent"}'`,
-      python: `import requests\n\nresponse = requests.post(\n    '${apiBaseUrl}/api/projects/${projectPlaceholder}/messages',\n    headers={'X-API-Key': '${keyPlaceholder}'},\n    json={'text': 'Hello from my agent'}\n)`,
-      node: `const response = await fetch(\n  '${apiBaseUrl}/api/projects/${projectPlaceholder}/messages',\n  {\n    method: 'POST',\n    headers: { 'X-API-Key': '${keyPlaceholder}', 'Content-Type': 'application/json' },\n    body: JSON.stringify({ text: 'Hello from my agent' })\n  }\n);`,
-    };
   };
 
   const copyToClipboard = async (text: string, type: "key" | "snippet") => {
@@ -193,7 +183,6 @@ export function ApiKeysSection() {
         body: JSON.stringify({ orgId: activeOrgId }),
       });
       if (res.ok) {
-        // Update the contact in store with the new orgId
         const contact = contacts[projectId];
         if (contact) {
           useContactStore.getState().upsertContact({ ...contact, orgId: activeOrgId });
@@ -206,11 +195,28 @@ export function ApiKeysSection() {
 
   const inputClass = "w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50";
 
-  // Key just created — show reveal card
-  if (createdKey) {
-    const activeSnippet = selectedProjectId
-      ? createdKey.snippets[snippetTab].replace(/\{PROJECT_ID\}/g, selectedProjectId)
-      : createdKey.snippets[snippetTab];
+  // ── Detail page (shared between "just created" and "viewing existing") ──
+
+  const isDetailView = createdKey || viewingKey;
+
+  if (isDetailView) {
+    const isNew = !!createdKey;
+    const keyName = createdKey?.name ?? viewingKey!.name;
+    const keyPrefix = createdKey?.prefix ?? viewingKey!.prefix;
+    const keyScopes = createdKey?.scopes ?? viewingKey!.scopes;
+    const fullKey = createdKey?.key ?? null;
+    const keyStatus = viewingKey?.status ?? "active";
+
+    // Build snippets — use full key if available, otherwise prefix placeholder
+    const keyForSnippet = fullKey ?? `${keyPrefix}...`;
+    const buildSnippet = (lang: "curl" | "python" | "node") => {
+      const pid = selectedProjectId || "{PROJECT_ID}";
+      if (lang === "curl") return `curl -X POST ${apiBaseUrl}/api/projects/${pid}/messages \\\n  -H 'X-API-Key: ${keyForSnippet}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{"text": "Hello from my agent"}'`;
+      if (lang === "python") return `import requests\n\nresponse = requests.post(\n    '${apiBaseUrl}/api/projects/${pid}/messages',\n    headers={'X-API-Key': '${keyForSnippet}'},\n    json={'text': 'Hello from my agent'}\n)`;
+      return `const response = await fetch(\n  '${apiBaseUrl}/api/projects/${pid}/messages',\n  {\n    method: 'POST',\n    headers: { 'X-API-Key': '${keyForSnippet}', 'Content-Type': 'application/json' },\n    body: JSON.stringify({ text: 'Hello from my agent' })\n  }\n);`;
+    };
+
+    const activeSnippet = buildSnippet(snippetTab);
 
     const projectLabel = selectedProjectId
       ? orgProjects.find((p) => p.id === selectedProjectId)?.name ?? "project"
@@ -224,14 +230,14 @@ export function ApiKeysSection() {
       `Endpoint: POST ${apiBaseUrl}/api/projects/${selectedProjectId || "{PROJECT_ID}"}/messages`,
       ``,
       `Headers:`,
-      `  X-API-Key: ${createdKey.key}`,
+      `  X-API-Key: ${keyForSnippet}`,
       `  Content-Type: application/json`,
       ``,
       `Body: { "text": "your message", "senderName": "AgentName" }`,
       ``,
       `Example using curl:`,
       `  curl -X POST ${apiBaseUrl}/api/projects/${selectedProjectId || "{PROJECT_ID}"}/messages \\`,
-      `    -H 'X-API-Key: ${createdKey.key}' \\`,
+      `    -H 'X-API-Key: ${keyForSnippet}' \\`,
       `    -H 'Content-Type: application/json' \\`,
       `    -d '{"text": "Task completed successfully", "senderName": "Agent"}'`,
       ``,
@@ -254,38 +260,102 @@ export function ApiKeysSection() {
       setTimeout(() => setCopiedGuide(false), 2000);
     };
 
+    const handleDismiss = () => {
+      setCreatedKey(null);
+      setViewingKey(null);
+      setSelectedProjectId("");
+      setSnippetTab("curl");
+    };
+
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-lg font-semibold text-foreground mb-1">API Key Created</h2>
+          <h2 className="text-lg font-semibold text-foreground mb-1">
+            {isNew ? "API Key Created" : keyName}
+          </h2>
           <p className="text-sm text-muted-foreground">
-            Copy your key now. You won't be able to see it again.
+            {isNew
+              ? "Copy your key now. You won't be able to see it again."
+              : "Key details, code snippets, and integration guide."}
           </p>
         </div>
 
         <div className="bg-primary/5 border border-primary/20 rounded-xl p-5 space-y-4">
+          {/* Key display */}
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-              {createdKey.name}
+              {keyName}
             </label>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 bg-muted/60 rounded-lg px-3 py-2.5 text-sm font-mono text-foreground break-all select-all">
-                {createdKey.key}
-              </code>
-              <button
-                onClick={() => copyToClipboard(createdKey.key, "key")}
-                className="flex-shrink-0 bg-primary text-primary-foreground rounded-lg px-3 py-2.5 text-sm font-medium hover:bg-primary/90 transition-colors"
-              >
-                {copiedKey ? "Copied!" : "Copy"}
-              </button>
-            </div>
+            {fullKey ? (
+              <div className="flex items-center gap-2">
+                <code className="flex-1 bg-muted/60 rounded-lg px-3 py-2.5 text-sm font-mono text-foreground break-all select-all">
+                  {fullKey}
+                </code>
+                <button
+                  onClick={() => copyToClipboard(fullKey, "key")}
+                  className="flex-shrink-0 bg-primary text-primary-foreground rounded-lg px-3 py-2.5 text-sm font-medium hover:bg-primary/90 transition-colors"
+                >
+                  {copiedKey ? "Copied!" : "Copy"}
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <code className="flex-1 bg-muted/60 rounded-lg px-3 py-2.5 text-sm font-mono text-muted-foreground">
+                  {keyPrefix}...
+                </code>
+                <span className="flex-shrink-0 text-xs text-muted-foreground/60">
+                  Full key not recoverable
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* Scope badge */}
+          {/* Status + metadata (for existing keys) */}
+          {viewingKey && (
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">Status:</span>
+                <span className={cn(
+                  "px-2 py-0.5 rounded-full text-[10px] font-semibold",
+                  keyStatus === "active" && "bg-emerald-500/10 text-emerald-500",
+                  keyStatus === "expired" && "bg-amber-500/10 text-amber-500",
+                  keyStatus === "revoked" && "bg-destructive/10 text-destructive",
+                )}>
+                  {keyStatus}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Rate limit: </span>
+                <span className="text-foreground">{viewingKey.rateLimitRpm} RPM</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Created: </span>
+                <span className="text-foreground">{new Date(viewingKey.createdAt).toLocaleDateString()}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Last used: </span>
+                <span className="text-foreground">{relativeTime(viewingKey.lastUsedAt)}</span>
+              </div>
+              {viewingKey.expiresAt && (
+                <div>
+                  <span className="text-muted-foreground">Expires: </span>
+                  <span className="text-foreground">{new Date(viewingKey.expiresAt).toLocaleDateString()}</span>
+                </div>
+              )}
+              {viewingKey.revokedAt && (
+                <div>
+                  <span className="text-muted-foreground">Revoked: </span>
+                  <span className="text-foreground">{new Date(viewingKey.revokedAt).toLocaleDateString()}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Scope badges */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Scopes:</span>
             <div className="flex flex-wrap gap-1">
-              {createdKey.scopes.map((s) => (
+              {keyScopes.map((s) => (
                 <span key={s} className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">
                   {s}
                 </span>
@@ -409,7 +479,7 @@ export function ApiKeysSection() {
                 <div>
                   <span className="font-medium text-foreground">Header: </span>
                   <code className="bg-muted/40 rounded px-1.5 py-0.5 font-mono text-[11px]">
-                    X-API-Key: {createdKey.prefix}...
+                    X-API-Key: {keyPrefix}...
                   </code>
                 </div>
                 <div>
@@ -470,15 +540,37 @@ export function ApiKeysSection() {
           </div>
         )}
 
-        <button
-          onClick={() => setCreatedKey(null)}
-          className="bg-primary text-primary-foreground rounded-lg px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          I've saved this key
-        </button>
+        {/* Actions */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleDismiss}
+            className="bg-primary text-primary-foreground rounded-lg px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            {isNew ? "I've saved this key" : "Back to keys"}
+          </button>
+          {viewingKey && viewingKey.status === "active" && (
+            <button
+              onClick={() => handleRevoke(viewingKey.id)}
+              className="text-sm text-destructive hover:text-destructive/80 transition-colors px-3 py-2"
+            >
+              Revoke
+            </button>
+          )}
+          {viewingKey && viewingKey.status === "revoked" && (
+            <button
+              onClick={() => handleDelete(viewingKey.id)}
+              disabled={deletingKeyId === viewingKey.id}
+              className="text-sm text-destructive hover:text-destructive/80 transition-colors px-3 py-2 disabled:opacity-50"
+            >
+              {deletingKeyId === viewingKey.id ? "Deleting..." : "Delete permanently"}
+            </button>
+          )}
+        </div>
       </div>
     );
   }
+
+  // ── Key list view ──
 
   return (
     <div className="space-y-6">
@@ -581,138 +673,57 @@ export function ApiKeysSection() {
               </tr>
             </thead>
             <tbody>
-              {keys.map((k) => {
-                const isExpanded = expandedKeyId === k.id;
-                const snippets = buildSnippets(k.prefix);
-                return (
-                  <tr key={k.id} className="border-b border-border last:border-0">
-                    <td colSpan={5} className="p-0">
-                      {/* Main row */}
-                      <div
-                        className="flex items-center cursor-pointer hover:bg-muted/10 transition-colors"
-                        onClick={() => setExpandedKeyId(isExpanded ? null : k.id)}
+              {keys.map((k) => (
+                <tr
+                  key={k.id}
+                  className="border-b border-border last:border-0 cursor-pointer hover:bg-muted/10 transition-colors"
+                  onClick={() => setViewingKey(k)}
+                >
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-foreground">{k.name}</div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {k.scopes.map((s) => (
+                        <span key={s} className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{k.prefix}...</td>
+                  <td className="px-4 py-3">
+                    <span className={cn(
+                      "px-2 py-0.5 rounded-full text-[10px] font-semibold",
+                      k.status === "active" && "bg-emerald-500/10 text-emerald-500",
+                      k.status === "expired" && "bg-amber-500/10 text-amber-500",
+                      k.status === "revoked" && "bg-destructive/10 text-destructive",
+                    )}>
+                      {k.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">
+                    {relativeTime(k.lastUsedAt)}
+                  </td>
+                  <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                    {k.status === "active" && (
+                      <button
+                        onClick={() => handleRevoke(k.id)}
+                        className="text-xs text-destructive hover:text-destructive/80 transition-colors"
                       >
-                        <div className="px-4 py-3 flex-1 min-w-0">
-                          <div className="font-medium text-foreground">{k.name}</div>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {k.scopes.map((s) => (
-                              <span key={s} className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted/60 text-muted-foreground">
-                                {s}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="px-4 py-3 font-mono text-xs text-muted-foreground whitespace-nowrap">{k.prefix}...</div>
-                        <div className="px-4 py-3">
-                          <span className={cn(
-                            "px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap",
-                            k.status === "active" && "bg-emerald-500/10 text-emerald-500",
-                            k.status === "expired" && "bg-amber-500/10 text-amber-500",
-                            k.status === "revoked" && "bg-destructive/10 text-destructive",
-                          )}>
-                            {k.status}
-                          </span>
-                        </div>
-                        <div className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                          {relativeTime(k.lastUsedAt)}
-                        </div>
-                        <div className="px-4 py-3 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                          {k.status === "active" && (
-                            <button
-                              onClick={() => handleRevoke(k.id)}
-                              className="text-xs text-destructive hover:text-destructive/80 transition-colors"
-                            >
-                              Revoke
-                            </button>
-                          )}
-                          {k.status === "revoked" && (
-                            <button
-                              onClick={() => handleDelete(k.id)}
-                              disabled={deletingKeyId === k.id}
-                              className="text-xs text-destructive hover:text-destructive/80 transition-colors disabled:opacity-50"
-                            >
-                              {deletingKeyId === k.id ? "Deleting..." : "Delete"}
-                            </button>
-                          )}
-                          <svg
-                            width="14" height="14" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                            className={cn("text-muted-foreground transition-transform", isExpanded && "rotate-180")}
-                          >
-                            <path d="M6 9l6 6 6-6" />
-                          </svg>
-                        </div>
-                      </div>
-
-                      {/* Expanded detail */}
-                      {isExpanded && (
-                        <div className="border-t border-border bg-muted/5 px-4 py-4 space-y-4">
-                          <div className="grid grid-cols-2 gap-4 text-xs">
-                            <div>
-                              <span className="text-muted-foreground">Created</span>
-                              <div className="text-foreground mt-0.5">{new Date(k.createdAt).toLocaleDateString()}</div>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">Rate limit</span>
-                              <div className="text-foreground mt-0.5">{k.rateLimitRpm} RPM</div>
-                            </div>
-                            {k.expiresAt && (
-                              <div>
-                                <span className="text-muted-foreground">Expires</span>
-                                <div className="text-foreground mt-0.5">{new Date(k.expiresAt).toLocaleDateString()}</div>
-                              </div>
-                            )}
-                            {k.revokedAt && (
-                              <div>
-                                <span className="text-muted-foreground">Revoked</span>
-                                <div className="text-foreground mt-0.5">{new Date(k.revokedAt).toLocaleDateString()}</div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Code snippets with prefix placeholder */}
-                          <div>
-                            <div className="text-xs font-medium text-muted-foreground mb-2">
-                              Code snippets <span className="text-[10px] font-normal">(replace {k.prefix}... with your full key)</span>
-                            </div>
-                            <div className="flex gap-1 mb-2">
-                              {(["curl", "python", "node"] as const).map((t) => (
-                                <button
-                                  key={t}
-                                  onClick={() => setDetailSnippetTab(t)}
-                                  className={cn(
-                                    "px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
-                                    detailSnippetTab === t
-                                      ? "bg-muted text-foreground"
-                                      : "text-muted-foreground hover:text-foreground",
-                                  )}
-                                >
-                                  {t === "curl" ? "cURL" : t === "python" ? "Python" : "Node.js"}
-                                </button>
-                              ))}
-                            </div>
-                            <div className="relative">
-                              <pre className="bg-muted/60 rounded-lg p-3 text-xs font-mono text-foreground overflow-x-auto whitespace-pre-wrap">
-                                {snippets[detailSnippetTab]}
-                              </pre>
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(snippets[detailSnippetTab]);
-                                  setCopiedDetailSnippet(true);
-                                  setTimeout(() => setCopiedDetailSnippet(false), 2000);
-                                }}
-                                className="absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-medium bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
-                              >
-                                {copiedDetailSnippet ? "Copied!" : "Copy"}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+                        Revoke
+                      </button>
+                    )}
+                    {k.status === "revoked" && (
+                      <button
+                        onClick={() => handleDelete(k.id)}
+                        disabled={deletingKeyId === k.id}
+                        className="text-xs text-destructive hover:text-destructive/80 transition-colors disabled:opacity-50"
+                      >
+                        {deletingKeyId === k.id ? "Deleting..." : "Delete"}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
