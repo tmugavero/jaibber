@@ -8,6 +8,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { useProjectStore, type LocalProject } from "@/stores/projectStore";
 import { runAgentStream, listenEvent, isTauri } from "@/lib/platform";
 import { parseMentions } from "@/lib/mentions";
+import { persistMessage } from "@/lib/messageApi";
 import type { AblyMessage, ExecutionMode } from "@/types/message";
 import type { Contact, AgentInfo } from "@/types/contact";
 import type * as Ably from "ably";
@@ -121,6 +122,20 @@ async function respondToMessage(
         responseDepth: nextDepth,
         respondingChain: nextChain,
       } satisfies AblyMessage);
+
+      // Dual-write: persist agent response to server
+      const { token: t } = useAuthStore.getState();
+      const { apiBaseUrl: url } = useSettingsStore.getState().settings;
+      if (t && url && fullText) {
+        persistMessage(url, t, convId, {
+          id: responseId,
+          senderType: "agent",
+          senderName: agentName,
+          type: "response",
+          text: fullText,
+        });
+      }
+
       unlisten();
     } else if (event.error) {
       if (flushTimer) clearTimeout(flushTimer);
@@ -136,6 +151,20 @@ async function respondToMessage(
         type: "error",
         agentName,
       } satisfies AblyMessage);
+
+      // Dual-write: persist agent error to server
+      const { token: t2 } = useAuthStore.getState();
+      const { apiBaseUrl: url2 } = useSettingsStore.getState().settings;
+      if (t2 && url2) {
+        persistMessage(url2, t2, convId, {
+          id: responseId,
+          senderType: "agent",
+          senderName: agentName,
+          type: "error",
+          text: errText,
+        });
+      }
+
       unlisten();
     } else {
       useChatStore.getState().appendChunk(convId, responseId, event.chunk);
@@ -517,6 +546,19 @@ export function sendMessage(projectId: string, text: string, executionMode: Exec
       executionMode,
     } satisfies AblyMessage).then(() => {
       useChatStore.getState().updateStatus(projectId, messageId, "sent");
+
+      // Dual-write: persist user message to server
+      const { token: t } = useAuthStore.getState();
+      const { apiBaseUrl: url } = useSettingsStore.getState().settings;
+      if (t && url) {
+        persistMessage(url, t, projectId, {
+          id: messageId,
+          senderType: "user",
+          senderName: username,
+          type: "message",
+          text,
+        });
+      }
     }).catch(() => {
       useChatStore.getState().updateStatus(projectId, messageId, "error");
     });

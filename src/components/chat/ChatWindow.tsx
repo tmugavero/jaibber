@@ -3,6 +3,7 @@ import { useChatStore } from "@/stores/chatStore";
 import { useContactStore } from "@/stores/contactStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { fetchMessages } from "@/lib/messageApi";
 import { MessageBubble } from "./MessageBubble";
 import { MessageInput } from "./MessageInput";
 import { sendMessage } from "@/hooks/useAbly";
@@ -37,6 +38,7 @@ export function ChatWindow({ contactId, onBack }: Props) {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [copiedProjectId, setCopiedProjectId] = useState(false);
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("auto");
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const msgCount = messages?.length ?? 0;
 
@@ -46,6 +48,28 @@ export function ChatWindow({ contactId, onBack }: Props) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [scrollTrigger]);
+
+  // Lazy-load server message history when conversation opens
+  useEffect(() => {
+    const { token, userId } = useAuthStore.getState();
+    const { apiBaseUrl } = useSettingsStore.getState().settings;
+    if (!token || !apiBaseUrl || !userId) return;
+
+    let cancelled = false;
+    setLoadingHistory(true);
+
+    fetchMessages(apiBaseUrl, token, contactId, userId, { limit: 50 })
+      .then(({ messages: serverMsgs }) => {
+        if (!cancelled && serverMsgs.length > 0) {
+          useChatStore.getState().mergeServerMessages(contactId, serverMsgs);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingHistory(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [contactId]);
 
   // Load project members when info panel opens
   useEffect(() => {
@@ -327,7 +351,12 @@ export function ChatWindow({ contactId, onBack }: Props) {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-0.5">
-        {msgCount === 0 && (
+        {loadingHistory && (
+          <div className="text-center text-xs text-muted-foreground py-2 animate-pulse">
+            Loading history...
+          </div>
+        )}
+        {msgCount === 0 && !loadingHistory && (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
             Send a message to start the conversation
           </div>

@@ -10,6 +10,7 @@ interface ChatStore {
   appendChunk: (conversationId: string, messageId: string, chunk: string) => void;
   markDone: (conversationId: string, messageId: string) => void;
   updateStatus: (conversationId: string, messageId: string, status: Message["status"]) => void;
+  mergeServerMessages: (conversationId: string, serverMessages: Message[]) => void;
   clearConversation: (conversationId: string) => void;
 }
 
@@ -75,6 +76,18 @@ export const useChatStore = create<ChatStore>((set) => ({
           m.id === messageId ? { ...m, status } : m
         ),
       };
+      return { messages: withSave(updated) };
+    }),
+  mergeServerMessages: (conversationId, serverMessages) =>
+    set((s) => {
+      const local = s.messages[conversationId] ?? [];
+      const localIds = new Set(local.map((m) => m.id));
+      const newFromServer = serverMessages.filter((m) => !localIds.has(m.id));
+      if (newFromServer.length === 0) return s;
+      const merged = [...newFromServer, ...local].sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+      );
+      const updated = { ...s.messages, [conversationId]: merged };
       return { messages: withSave(updated) };
     }),
   clearConversation: (conversationId) =>
