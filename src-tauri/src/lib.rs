@@ -3,6 +3,7 @@ use std::sync::Arc;
 mod error;
 mod state;
 mod agent_providers;
+mod openclaw;
 mod commands;
 
 use commands::settings_commands;

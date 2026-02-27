@@ -19,6 +19,7 @@ const PROVIDER_OPTIONS = [
   { value: "claude", label: "Claude" },
   { value: "codex", label: "Codex" },
   { value: "gemini", label: "Gemini" },
+  { value: "openclaw", label: "OpenClaw" },
   { value: "custom", label: "Custom" },
 ] as const;
 
@@ -31,6 +32,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   claude: "Claude",
   codex: "Codex",
   gemini: "Gemini",
+  openclaw: "OpenClaw",
   custom: "Custom",
 };
 

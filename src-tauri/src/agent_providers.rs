@@ -8,6 +8,7 @@ pub enum ProviderKind {
     Claude,
     Codex,
     Gemini,
+    OpenClaw,
     Custom,
 }
 
@@ -16,6 +17,7 @@ impl ProviderKind {
         match s.to_lowercase().as_str() {
             "codex" => Self::Codex,
             "gemini" => Self::Gemini,
+            "openclaw" => Self::OpenClaw,
             "custom" => Self::Custom,
             _ => Self::Claude, // default
         }
@@ -80,6 +82,14 @@ impl ProviderConfig {
                 ),
                 api_key_env_var: Some("GOOGLE_API_KEY"),
             },
+            ProviderKind::OpenClaw => {
+                // OpenClaw uses HTTP, not CLI — this should never be called.
+                // The process_commands module branches before reaching command building.
+                ProviderCommand {
+                    bash_command: "echo 'OpenClaw uses HTTP — not a CLI provider'".to_string(),
+                    api_key_env_var: None,
+                }
+            }
             ProviderKind::Custom => {
                 let template = self.custom_command.as_deref().unwrap_or("echo 'No custom command configured'");
                 // Replace {prompt} placeholder with the env var reference
@@ -147,6 +157,7 @@ impl ProviderConfig {
                     api_key_env_var: Some("GOOGLE_API_KEY"),
                 }
             }
+            ProviderKind::OpenClaw => self.build_oneshot_cmd(), // HTTP path — never called
             ProviderKind::Custom => {
                 // Custom: same as oneshot — user is responsible for their command template.
                 self.build_oneshot_cmd()
@@ -160,7 +171,7 @@ impl ProviderConfig {
             ProviderKind::Claude => Some("ANTHROPIC_API_KEY"),
             ProviderKind::Codex => Some("OPENAI_API_KEY"),
             ProviderKind::Gemini => Some("GOOGLE_API_KEY"),
-            ProviderKind::Custom => None,
+            ProviderKind::OpenClaw | ProviderKind::Custom => None,
         }
     }
 
@@ -182,6 +193,10 @@ impl ProviderConfig {
                  Install it with: npm install -g @anthropic-ai/gemini-cli\n\
                  Then restart Jaibber."
             }
+            ProviderKind::OpenClaw => {
+                "OpenClaw gateway not found. Install OpenClaw and run `openclaw gateway start`.\n\
+                 https://openclaw.ai"
+            }
             ProviderKind::Custom => {
                 "Custom agent command not found. Verify the command is installed and on PATH."
             }
@@ -194,6 +209,7 @@ impl ProviderConfig {
             ProviderKind::Claude => "Run `claude login` to restore local auth",
             ProviderKind::Codex => "Run `codex auth` to restore local auth",
             ProviderKind::Gemini => "Run `gemini auth login` to restore local auth",
+            ProviderKind::OpenClaw => "Check your OpenClaw gateway config at ~/.openclaw/openclaw.json",
             ProviderKind::Custom => "Re-authenticate your agent CLI",
         }
     }

@@ -147,6 +147,30 @@ pub async fn run_agent_stream(
     }
     full_prompt.push_str(&prompt);
 
+    // ── OpenClaw: HTTP path (no CLI process) ─────────────────────────
+    if provider.kind == ProviderKind::OpenClaw {
+        let oc_config = crate::openclaw::discover_openclaw()
+            .map_err(|e| JaibberError::Other(e))?;
+
+        let rid = response_id.clone();
+        let win = window.clone();
+        let sys = system_prompt.clone();
+        let fp = full_prompt.clone();
+        tokio::spawn(async move {
+            if let Err(e) = crate::openclaw::stream_openclaw(
+                &oc_config, &sys, &fp, &rid, &win,
+            ).await {
+                let _ = win.emit("agent-chunk", serde_json::json!({
+                    "responseId": rid,
+                    "chunk": "",
+                    "done": false,
+                    "error": e,
+                }));
+            }
+        });
+        return Ok(());
+    }
+
     let pcmd = provider.build_stream_cmd(!system_prompt.is_empty());
     let provider_kind = provider.kind.clone();
     let reauth_hint = provider.reauth_hint().to_string();
