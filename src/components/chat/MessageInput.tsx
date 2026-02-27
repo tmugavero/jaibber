@@ -44,10 +44,10 @@ export function MessageInput({ onSend, disabled, agents = [] }: Props) {
     : [];
   const showMention = mentionInfo !== null && filteredAgents.length > 0;
 
-  // Reset selection index when filtered list changes
+  // Reset selection index to bottom of list (closest to cursor) when filtered list changes
   useEffect(() => {
-    setMentionIndex(0);
-  }, [mentionInfo?.query]);
+    setMentionIndex(filteredAgents.length - 1);
+  }, [mentionInfo?.query, filteredAgents.length]);
 
   const insertMention = (agentName: string) => {
     if (!mentionInfo) return;
@@ -210,7 +210,7 @@ export function MessageInput({ onSend, disabled, agents = [] }: Props) {
         >
           {filteredAgents.map((agent, i) => (
             <button
-              key={agent.connectionId}
+              key={`${agent.connectionId}-${agent.agentName}`}
               onMouseDown={(e) => {
                 e.preventDefault(); // Prevent textarea blur
                 insertMention(agent.agentName);
