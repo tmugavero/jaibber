@@ -122,6 +122,13 @@ export async function runAgentStream(params: {
   conversationContext: string;
   agentProvider?: string;
   customCommand?: string;
+  attachments?: Array<{
+    id: string;
+    filename: string;
+    mimeType: string;
+    fileSize: number;
+    blobUrl: string;
+  }>;
 }): Promise<void> {
   if (!isTauri) {
     throw new Error("Agent streaming is only available on desktop agent machines.");

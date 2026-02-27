@@ -1,7 +1,7 @@
 use tauri::{State, Emitter};
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use crate::state::AppState;
+use crate::state::{AppState, AttachmentInfo};
 use crate::error::JaibberError;
 use crate::agent_providers::{ProviderConfig, ProviderKind, extract_text_from_line, is_auth_error};
 
@@ -113,6 +113,7 @@ pub async fn run_agent_stream(
     conversation_context: String,
     agent_provider: Option<String>,
     custom_command: Option<String>,
+    attachments: Option<Vec<AttachmentInfo>>,
     window: tauri::Window,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), JaibberError> {
@@ -170,6 +171,33 @@ pub async fn run_agent_stream(
             }
         });
         return Ok(());
+    }
+
+    // ── Claude: direct API (supports multimodal when API key is set) ──
+    if provider.kind == ProviderKind::Claude {
+        if let Some(ref api_key) = fallback_key {
+            let rid = response_id.clone();
+            let win = window.clone();
+            let sys = system_prompt.clone();
+            let conv = conversation_context.clone();
+            let prm = prompt.clone();
+            let atts = attachments.unwrap_or_default();
+            let key = api_key.clone();
+            tokio::spawn(async move {
+                if let Err(e) = crate::claude_api::stream_claude_api(
+                    &key, &sys, &prm, &conv, &atts, &rid, &win,
+                ).await {
+                    let _ = win.emit("agent-chunk", serde_json::json!({
+                        "responseId": rid,
+                        "chunk": "",
+                        "done": false,
+                        "error": e,
+                    }));
+                }
+            });
+            return Ok(());
+        }
+        // No API key → fall through to CLI path
     }
 
     let pcmd = provider.build_stream_cmd(!system_prompt.is_empty());

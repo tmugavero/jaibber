@@ -4,6 +4,7 @@ mod error;
 mod state;
 mod agent_providers;
 mod openclaw;
+mod claude_api;
 mod commands;
 
 use commands::settings_commands;

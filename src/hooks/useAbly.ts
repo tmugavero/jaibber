@@ -239,6 +239,13 @@ async function respondToMessage(
       systemPrompt,
       conversationContext: recentMessages,
       agentProvider: localProject.agentProvider || "claude",
+      attachments: attachments?.map(att => ({
+        id: att.id,
+        filename: att.filename,
+        mimeType: att.mimeType,
+        fileSize: att.fileSize,
+        blobUrl: att.blobUrl,
+      })),
     });
   } catch (err) {
     if (flushTimer) clearTimeout(flushTimer);

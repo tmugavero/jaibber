@@ -39,6 +39,17 @@ impl Default for AppSettings {
     }
 }
 
+/// Attachment metadata passed from the frontend for multimodal API calls.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentInfo {
+    pub id: String,
+    pub filename: String,
+    pub mime_type: String,
+    pub file_size: u64,
+    pub blob_url: String,
+}
+
 impl AppSettings {
     /// Get the fallback API key for a given provider.
     pub fn fallback_key_for(&self, provider: &str) -> Option<&str> {
