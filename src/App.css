@@ -55,6 +55,15 @@
   }
 }
 
+/* Native select/option dropdown styling (dark theme) */
+select {
+  color-scheme: dark;
+}
+option {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
