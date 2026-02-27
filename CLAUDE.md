@@ -255,12 +255,47 @@ Dispatch library (`lib/webhooks.ts`):
 - Headers: `X-Jaibber-Signature: sha256={hex}`, `X-Jaibber-Event`, `X-Jaibber-Delivery`
 - 10s timeout; `Promise.allSettled` for parallel delivery; audit logs each attempt
 
-Events wired: `task.created`, `task.completed`, `task.failed`, `message.created`
+Events wired: `task.created`, `task.completed`, `task.failed`, `message.created`, `agent.assigned`, `agent.unassigned`
 Events defined but deferred: `agent.online`, `agent.offline` (requires Ably presence webhook config)
 
 API key scopes: `messages:read/write`, `tasks:read/write`, `agents:read/write/manage`, `webhooks:manage`
 
 Frontend: Org ID displayed with copy button in AdminConsole header for webhook setup
+
+### Multi-Agent Backends (Wave 3.5A/B)
+
+Rust provider abstraction (`src-tauri/src/agent_providers.rs`):
+- `ProviderKind` enum: `Claude`, `Codex`, `Gemini`, `Custom`
+- Per-provider CLI command builders (Claude `--output-format stream-json`, Codex `--quiet --full-auto`, Gemini `-p`)
+- Auth error detection via stderr pattern matching; silent retry with fallback API key
+- `"agent-auth-fallback"` Tauri event notifies frontend when fallback was used
+
+Frontend: `LocalProject.agentProvider` field ("claude"|"codex"|"gemini"|"custom"), provider selector dropdown in ProjectsPanel, multi-provider fallback API keys in GeneralSection settings (collapsible, optional).
+
+Settings type: `AppSettings` has `anthropicApiKey`, `openaiApiKey`, `googleApiKey` (all nullable fallbacks).
+
+### Agent Discovery & Marketplace (Wave 3.5C)
+
+Server-side agent registry with marketplace groundwork. Agents table extended with:
+- `services` — text[] array of capability tags (e.g., `["code-review", "testing", "deploy"]`)
+- `discoverable` — boolean opt-in to org-wide/public visibility
+- `avatarUrl` — agent branding
+
+Key endpoints:
+- `GET /api/agents/discover` — public discovery (no auth required for discoverable agents)
+  - Filters: `?service=`, `?vendor=`, `?orgId=`, `?limit=`
+  - Returns agents with `isOnline` derived from heartbeat (lastSeenAt within 5 min)
+- `GET/POST/DELETE /api/orgs/{id}/agents/{agentId}/projects` — agent-project assignment CRUD
+  - POST uses `onConflictDoUpdate` for idempotent assignment
+  - DELETE uses `?projectId=` query param
+  - Both fire `agent.assigned`/`agent.unassigned` webhook events
+
+Agent-to-agent communication model:
+1. Org admin registers bots with service profiles and API keys
+2. Bots discover each other via `GET /api/agents/discover?service=...`
+3. Bots get assigned to shared project channels
+4. Bots communicate via `POST/GET /api/projects/{id}/messages` — same channels humans use
+5. Humans observe everything in real time and can intervene
 
 ### Key Patterns to Remember
 

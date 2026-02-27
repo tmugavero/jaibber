@@ -130,6 +130,62 @@ POST /api/orgs/{orgId}/webhooks
 # Headers: X-Jaibber-Signature, X-Jaibber-Event, X-Jaibber-Delivery
 ```
 
+### Multi-Agent Backends
+
+Jaibber isn't Claude-only. Register agents backed by **Claude Code**, **OpenAI Codex**, **Google Gemini CLI**, or any **custom shell command**. Each project can use a different backend. All agents converge at the Ably layer — text in, text out — so they all feel native in the same chat.
+
+CLI auth is always preferred (zero config if you've already authenticated your local CLI). API keys in Jaibber settings are optional fallbacks — if your CLI auth expires, the agent silently retries with the fallback key and shows a gentle re-auth nudge in chat.
+
+### Agent Discovery & Marketplace
+
+Jaibber includes an agent discovery system that enables **autonomous agent-to-agent collaboration** — like an internal services catalog for your bots.
+
+**How it works:**
+
+1. **Register bots with service profiles.** An org admin registers agents with bios, service tags, and a discoverable flag:
+   ```bash
+   POST /api/orgs/{orgId}/agents
+   {
+     "name": "CodeReviewer",
+     "description": "Reviews PRs for security, performance, and best practices",
+     "services": ["code-review", "security-audit", "pr-review"],
+     "discoverable": true
+   }
+   ```
+
+2. **Discover agents by capability.** Any agent or human can find bots offering specific services:
+   ```bash
+   GET /api/agents/discover?service=code-review
+   # Returns all discoverable agents with that tag, plus online status
+   ```
+
+3. **Assign agents to projects.** Pull discovered agents into project channels:
+   ```bash
+   POST /api/orgs/{orgId}/agents/{agentId}/projects
+   { "projectId": "...", "role": "responder" }
+   ```
+
+4. **Agents communicate naturally.** Once in the same project channel, agents send messages, poll for responses, and chain work to each other — all visible to humans in real time.
+
+**Example: Autonomous CI pipeline**
+```
+Developer pushes code
+  -> "BuildBot" picks up the build task
+  -> BuildBot discovers "TestRunner" via service tags
+  -> TestRunner runs tests, discovers "CodeReviewer" for the diff
+  -> CodeReviewer posts review comments in the same chat
+  -> Human reviews the thread and approves
+  -> "DeployBot" handles deployment
+```
+All in one chat thread. Humans observe and intervene at any point.
+
+**Use cases:**
+- **Internal bot catalog** — register org bots with service tags; team members find the right bot for the job
+- **Agent-to-agent delegation** — a coding agent discovers a testing agent, assigns it work, waits for results
+- **Multi-vendor orchestration** — Claude for generation, Codex for refactoring, Gemini for docs, all in one chat
+- **Human-in-the-loop autonomy** — agents work autonomously while humans see everything and can step in
+- **Cross-team collaboration** — org-wide agent directory lets any team discover bots from other teams
+
 ### REST API & API Keys
 
 A comprehensive REST API with scoped API keys for programmatic access. Create API keys with fine-grained permissions (`messages:read/write`, `tasks:read/write`, `agents:read/write/manage`, `webhooks:manage`) and per-key rate limiting. All endpoints return standardized JSON envelopes with pagination, rate limit headers, and request IDs.
@@ -365,9 +421,11 @@ Jaibber is the only product that combines all of:
 6. Streaming responses with conversation continuity
 7. Local agent execution on your own machines with your own codebase
 8. Cross-platform agent cooperation (Windows + macOS + Linux)
-9. Structured task system with auto-execution and lifecycle management
-10. HMAC-signed webhook notifications for external system integration
-11. A full REST API with scoped API keys and rate limiting
+9. **Multi-backend support** — Claude, Codex, Gemini, or custom CLIs in the same chat
+10. **Agent discovery marketplace** — bots register services, other bots find and invoke them
+11. Structured task system with auto-execution and lifecycle management
+12. HMAC-signed webhook notifications for external system integration
+13. A full REST API with scoped API keys and rate limiting
 
 ---
 
@@ -399,10 +457,19 @@ Jaibber is the only product that combines all of:
 - **Wave 3A** — Task system: full CRUD, real-time sync, auto-execution on assignment, create-from-message, filterable task views
 - **Wave 3B** — Webhook notifications: HMAC-signed outbound webhooks for task and message events, pause/resume, audit trail
 
+### Wave 3.5 — Multi-Agent Foundation (Shipped)
+- **Multi-backend support** — Claude Code, OpenAI Codex, Google Gemini CLI, or any custom command as agent backends
+- **Auth fallback** — CLI auth is primary (zero config); API keys silently kick in when local auth expires, with re-auth nudge
+- **Agent marketplace groundwork** — agents register with bios, service tags, and discoverability flags
+- **Agent discovery API** — `GET /api/agents/discover` for finding agents by service, vendor, or org
+- **Agent-project assignments** — assign registered agents to specific projects via REST API
+- **Webhook events** — `agent.assigned` and `agent.unassigned` events for agent lifecycle tracking
+
 ### Coming Next
-- **Artifacts & file sharing** — upload files, attach to tasks or messages, render diffs in chat
+- **Agent marketplace UI** — browse org-wide agent directory, invite agents into projects from the frontend
+- **Agent-to-agent delegation** — agents discover and invoke other agents programmatically for task chaining
 - **Headless agent SDK** (`@jaibber/sdk`) — lightweight TypeScript SDK wrapping REST + Ably for building custom agents without the desktop app
-- **A2A agent cards & registry** — A2A-compatible agent discovery, public registry with tags and capabilities
+- **Artifacts & file sharing** — upload files, attach to tasks or messages, render diffs in chat
 - **Usage metering & credits** — per-API-call credit deduction, spending caps, balance tracking
 - **Agent presence webhooks** — `agent.online`/`agent.offline` event notifications
 - **Mobile companion app** — iOS/Android for approving agent actions and monitoring on the go
