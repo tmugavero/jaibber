@@ -7,7 +7,8 @@ export interface LocalProject {
   ablyChannelName: string;  // "jaibber:project:{projectId}"
   agentName: string;        // e.g. "Coder", "Tester" — defaults to machineName
   agentInstructions: string; // system prompt prepended to every agent call
-  agentProvider: string;    // "claude" | future providers — defaults to "claude"
+  agentProvider: string;    // "claude" | "codex" | "gemini" | "custom"
+  customCommand?: string;   // for "custom" provider: command template with {prompt} placeholder
 }
 
 interface ProjectStore {

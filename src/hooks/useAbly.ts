@@ -98,6 +98,9 @@ async function respondToMessage(
     } satisfies AblyMessage);
   };
 
+  // Cleanup helper — unlistens both chunk and auth-fallback events
+  const cleanup = () => { unlisten(); unlistenAuth(); };
+
   // Listen for streaming events from Rust
   const unlisten = await listenEvent<{
     responseId: string;
@@ -141,7 +144,7 @@ async function respondToMessage(
       }
 
       onComplete?.(true);
-      unlisten();
+      cleanup();
     } else if (event.error) {
       if (flushTimer) clearTimeout(flushTimer);
       const errText = `Agent error: ${event.error}`;
@@ -171,7 +174,7 @@ async function respondToMessage(
       }
 
       onComplete?.(false);
-      unlisten();
+      cleanup();
     } else {
       useChatStore.getState().appendChunk(convId, responseId, event.chunk);
       chunkBuffer += event.chunk;
@@ -182,6 +185,18 @@ async function respondToMessage(
         }, 200);
       }
     }
+  });
+
+  // Listen for auth fallback events — show a subtle notice in the chat bubble
+  const unlistenAuth = await listenEvent<{
+    responseId: string;
+    provider: string;
+    message: string;
+  }>("agent-auth-fallback", (event) => {
+    if (event.responseId !== responseId) return;
+    // Append a subtle notice to the streaming message
+    const notice = `\n\n---\n_${event.message}_`;
+    useChatStore.getState().appendChunk(convId, responseId, notice);
   });
 
   // Build system prompt, prepending plan-mode instructions if needed
@@ -198,6 +213,7 @@ async function respondToMessage(
       responseId,
       systemPrompt,
       conversationContext: recentMessages,
+      agentProvider: localProject.agentProvider || "claude",
     });
   } catch (err) {
     if (flushTimer) clearTimeout(flushTimer);
@@ -214,7 +230,7 @@ async function respondToMessage(
       agentName,
     } satisfies AblyMessage);
     onComplete?.(false);
-    unlisten();
+    cleanup();
   }
 }
 

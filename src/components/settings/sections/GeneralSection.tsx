@@ -7,14 +7,15 @@ export function GeneralSection() {
   const username = useAuthStore((s) => s.username);
   const settings = useSettingsStore((s) => s.settings);
   const [machineName, setMachineName] = useState(settings.machineName);
-  const [apiKey, setApiKey] = useState(settings.anthropicApiKey ?? "");
+  const [anthropicKey, setAnthropicKey] = useState(settings.anthropicApiKey ?? "");
+  const [openaiKey, setOpenaiKey] = useState(settings.openaiApiKey ?? "");
+  const [googleKey, setGoogleKey] = useState(settings.googleApiKey ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showFallbackKeys, setShowFallbackKeys] = useState(false);
 
   const handleSignOut = async () => {
     useAuthStore.getState().clearAuth();
-    // Overwrite persisted auth (more reliable than delete on Tauri store)
-    // Timeout ensures we always reload even if the store hangs
     await Promise.race([
       storage.set("auth", null).catch(() => {}),
       new Promise((r) => setTimeout(r, 1000)),
@@ -28,7 +29,9 @@ export function GeneralSection() {
       const updated = {
         ...settings,
         machineName,
-        anthropicApiKey: apiKey || null,
+        anthropicApiKey: anthropicKey || null,
+        openaiApiKey: openaiKey || null,
+        googleApiKey: googleKey || null,
       };
       await saveSettings(updated);
       await storage.set("schema_version", 2);
@@ -39,6 +42,8 @@ export function GeneralSection() {
       setSaving(false);
     }
   };
+
+  const hasAnyKey = !!(anthropicKey || openaiKey || googleKey);
 
   const inputClass = "w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50";
 
@@ -79,17 +84,71 @@ export function GeneralSection() {
               />
             </div>
 
+            {/* Fallback API Keys — collapsible */}
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                Anthropic API Key <span className="font-normal opacity-60">(optional)</span>
-              </label>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="sk-ant-..."
-                className={inputClass + " font-mono"}
-              />
+              <button
+                onClick={() => setShowFallbackKeys(!showFallbackKeys)}
+                className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <svg
+                  width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  className={`transition-transform ${showFallbackKeys ? "rotate-90" : ""}`}
+                >
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+                Fallback API Keys
+                {hasAnyKey && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 font-medium">
+                    configured
+                  </span>
+                )}
+                <span className="font-normal opacity-60">(optional)</span>
+              </button>
+              <p className="text-[11px] text-muted-foreground/70 mt-1 ml-5">
+                Used only if your local CLI auth expires. Your authenticated CLI is always used first.
+              </p>
+
+              {showFallbackKeys && (
+                <div className="mt-3 ml-5 space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-medium text-muted-foreground mb-1">
+                      Anthropic <span className="font-normal opacity-60">(Claude)</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={anthropicKey}
+                      onChange={(e) => setAnthropicKey(e.target.value)}
+                      placeholder="sk-ant-..."
+                      className={inputClass + " font-mono text-xs"}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-muted-foreground mb-1">
+                      OpenAI <span className="font-normal opacity-60">(Codex)</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={openaiKey}
+                      onChange={(e) => setOpenaiKey(e.target.value)}
+                      placeholder="sk-..."
+                      className={inputClass + " font-mono text-xs"}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-muted-foreground mb-1">
+                      Google <span className="font-normal opacity-60">(Gemini)</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={googleKey}
+                      onChange={(e) => setGoogleKey(e.target.value)}
+                      placeholder="AIza..."
+                      className={inputClass + " font-mono text-xs"}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             <button

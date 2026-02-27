@@ -3,6 +3,8 @@ import type { AppSettings } from "@/types/settings";
 
 const DEFAULT_SETTINGS: AppSettings = {
   anthropicApiKey: null,
+  openaiApiKey: null,
+  googleApiKey: null,
   machineName: "",
   apiBaseUrl: "https://jaibber-server.vercel.app",
 };

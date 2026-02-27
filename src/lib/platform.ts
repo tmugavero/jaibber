@@ -74,6 +74,8 @@ export const storage = {
 
 const DEFAULT_SETTINGS: AppSettings = {
   anthropicApiKey: null,
+  openaiApiKey: null,
+  googleApiKey: null,
   machineName: "",
   apiBaseUrl: "https://jaibber-server.vercel.app",
 };
@@ -99,12 +101,17 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
 
 // ── Agent execution ──────────────────────────────────────────────────
 
-export async function runAgent(prompt: string, projectDir: string): Promise<string> {
+export async function runAgent(
+  prompt: string,
+  projectDir: string,
+  agentProvider?: string,
+  customCommand?: string,
+): Promise<string> {
   if (!isTauri) {
     throw new Error("Agent execution is only available on desktop agent machines.");
   }
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<string>("run_agent", { prompt, projectDir });
+  return invoke<string>("run_agent", { prompt, projectDir, agentProvider, customCommand });
 }
 
 export async function runAgentStream(params: {
@@ -113,6 +120,8 @@ export async function runAgentStream(params: {
   responseId: string;
   systemPrompt: string;
   conversationContext: string;
+  agentProvider?: string;
+  customCommand?: string;
 }): Promise<void> {
   if (!isTauri) {
     throw new Error("Agent streaming is only available on desktop agent machines.");

@@ -15,6 +15,37 @@ async function saveProjects(projects: LocalProject[]) {
   await storage.set("local_projects", projects);
 }
 
+const PROVIDER_OPTIONS = [
+  { value: "claude", label: "Claude" },
+  { value: "codex", label: "Codex" },
+  { value: "gemini", label: "Gemini" },
+  { value: "custom", label: "Custom" },
+] as const;
+
+const PROVIDER_LABELS: Record<string, string> = {
+  claude: "Claude",
+  codex: "Codex",
+  gemini: "Gemini",
+  custom: "Custom",
+};
+
+function ProviderSelect({ value, onChange, inputClass }: { value: string; onChange: (v: string) => void; inputClass: string }) {
+  return (
+    <div>
+      <label className="block text-[10px] text-muted-foreground mb-0.5">Agent backend</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={inputClass + " text-xs"}
+      >
+        {PROVIDER_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -41,12 +72,16 @@ function ProjectCard({ contact }: { contact: Contact }) {
   const [editing, setEditing] = useState(false);
   const [editAgentName, setEditAgentName] = useState("");
   const [editAgentInstructions, setEditAgentInstructions] = useState("");
+  const [editAgentProvider, setEditAgentProvider] = useState("claude");
+  const [editCustomCommand, setEditCustomCommand] = useState("");
 
   // Link state for registering on this machine
   const [linking, setLinking] = useState(false);
   const [linkDir, setLinkDir] = useState("");
   const [linkAgentName, setLinkAgentName] = useState("");
   const [linkAgentInstructions, setLinkAgentInstructions] = useState("");
+  const [linkAgentProvider, setLinkAgentProvider] = useState("claude");
+  const [linkCustomCommand, setLinkCustomCommand] = useState("");
 
   // Invite link state
   const [showInvites, setShowInvites] = useState(false);
@@ -150,6 +185,8 @@ function ProjectCard({ contact }: { contact: Contact }) {
   const handleStartEdit = () => {
     setEditAgentName(localProject?.agentName || "");
     setEditAgentInstructions(localProject?.agentInstructions || "");
+    setEditAgentProvider(localProject?.agentProvider || "claude");
+    setEditCustomCommand(localProject?.customCommand || "");
     setEditing(true);
   };
 
@@ -159,6 +196,8 @@ function ProjectCard({ contact }: { contact: Contact }) {
       ...localProject,
       agentName: editAgentName.trim() || defaultAgentName,
       agentInstructions: editAgentInstructions.trim(),
+      agentProvider: editAgentProvider,
+      customCommand: editAgentProvider === "custom" ? editCustomCommand.trim() : undefined,
     };
     useProjectStore.getState().addProject(updated);
     saveProjects(useProjectStore.getState().projects);
@@ -174,7 +213,8 @@ function ProjectCard({ contact }: { contact: Contact }) {
       ablyChannelName: contact.ablyChannelName,
       agentName: linkAgentName.trim() || defaultAgentName,
       agentInstructions: linkAgentInstructions.trim(),
-      agentProvider: "claude",
+      agentProvider: linkAgentProvider,
+      customCommand: linkAgentProvider === "custom" ? linkCustomCommand.trim() : undefined,
     };
     useProjectStore.getState().addProject(lp);
     saveProjects(useProjectStore.getState().projects);
@@ -182,6 +222,8 @@ function ProjectCard({ contact }: { contact: Contact }) {
     setLinkDir("");
     setLinkAgentName("");
     setLinkAgentInstructions("");
+    setLinkAgentProvider("claude");
+    setLinkCustomCommand("");
   };
 
   const handleUnlink = () => {
@@ -421,6 +463,11 @@ function ProjectCard({ contact }: { contact: Contact }) {
             <span className="text-[11px] text-primary/80 font-medium">
               Agent: {localProject.agentName || defaultAgentName}
             </span>
+            {localProject.agentProvider && localProject.agentProvider !== "claude" && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground font-medium">
+                {PROVIDER_LABELS[localProject.agentProvider] || localProject.agentProvider}
+              </span>
+            )}
             <span className="text-[10px] text-muted-foreground font-mono truncate flex-1">
               {localProject.projectDir}
             </span>
@@ -455,6 +502,21 @@ function ProjectCard({ contact }: { contact: Contact }) {
             placeholder={`Agent name (default: ${defaultAgentName})`}
             className={inputClass + " text-xs"}
           />
+          <ProviderSelect value={editAgentProvider} onChange={setEditAgentProvider} inputClass={inputClass} />
+          {editAgentProvider === "custom" && (
+            <div>
+              <label className="block text-[10px] text-muted-foreground mb-0.5">
+                Command template <span className="opacity-60">(use {"{prompt}"} as placeholder)</span>
+              </label>
+              <input
+                type="text"
+                value={editCustomCommand}
+                onChange={(e) => setEditCustomCommand(e.target.value)}
+                placeholder='e.g. my-agent --prompt {prompt}'
+                className={inputClass + " text-xs font-mono"}
+              />
+            </div>
+          )}
           <textarea
             value={editAgentInstructions}
             onChange={(e) => setEditAgentInstructions(e.target.value)}
@@ -508,6 +570,21 @@ function ProjectCard({ contact }: { contact: Contact }) {
             placeholder={`Agent name (default: ${defaultAgentName})`}
             className={inputClass + " text-xs"}
           />
+          <ProviderSelect value={linkAgentProvider} onChange={setLinkAgentProvider} inputClass={inputClass} />
+          {linkAgentProvider === "custom" && (
+            <div>
+              <label className="block text-[10px] text-muted-foreground mb-0.5">
+                Command template <span className="opacity-60">(use {"{prompt}"} as placeholder)</span>
+              </label>
+              <input
+                type="text"
+                value={linkCustomCommand}
+                onChange={(e) => setLinkCustomCommand(e.target.value)}
+                placeholder='e.g. my-agent --prompt {prompt}'
+                className={inputClass + " text-xs font-mono"}
+              />
+            </div>
+          )}
           <textarea
             value={linkAgentInstructions}
             onChange={(e) => setLinkAgentInstructions(e.target.value)}
@@ -592,6 +669,8 @@ export function ProjectsPanel() {
   const [newProjectDir, setNewProjectDir] = useState("");
   const [newAgentName, setNewAgentName] = useState("");
   const [newAgentInstructions, setNewAgentInstructions] = useState("");
+  const [newAgentProvider, setNewAgentProvider] = useState("claude");
+  const [newCustomCommand, setNewCustomCommand] = useState("");
   const [busy, setBusy] = useState(false);
 
   const defaultAgentName = useSettingsStore.getState().settings.machineName || "Agent";
@@ -646,7 +725,8 @@ export function ProjectsPanel() {
           ablyChannelName: p.ablyChannelName,
           agentName: newAgentName.trim() || defaultAgentName,
           agentInstructions: newAgentInstructions.trim(),
-          agentProvider: "claude",
+          agentProvider: newAgentProvider,
+          customCommand: newAgentProvider === "custom" ? newCustomCommand.trim() : undefined,
         };
         useProjectStore.getState().addProject(newLocal);
         saveProjects(useProjectStore.getState().projects);
@@ -666,6 +746,8 @@ export function ProjectsPanel() {
       setNewProjectDir("");
       setNewAgentName("");
       setNewAgentInstructions("");
+      setNewAgentProvider("claude");
+      setNewCustomCommand("");
       setCreating(false);
     } catch (e) {
       setError(`Network error: ${e}`);
@@ -746,6 +828,21 @@ export function ProjectsPanel() {
                 placeholder={`Agent name (default: ${defaultAgentName})`}
                 className={inputClass}
               />
+              <ProviderSelect value={newAgentProvider} onChange={setNewAgentProvider} inputClass={inputClass} />
+              {newAgentProvider === "custom" && (
+                <div>
+                  <label className="block text-[10px] text-muted-foreground mb-0.5">
+                    Command template <span className="opacity-60">(use {"{prompt}"} as placeholder)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newCustomCommand}
+                    onChange={(e) => setNewCustomCommand(e.target.value)}
+                    placeholder='e.g. my-agent --prompt {prompt}'
+                    className={inputClass + " font-mono"}
+                  />
+                </div>
+              )}
               <textarea
                 value={newAgentInstructions}
                 onChange={(e) => setNewAgentInstructions(e.target.value)}
