@@ -1,3 +1,5 @@
+import type { MessageAttachment } from "./attachment";
+
 export type ExecutionMode = "auto" | "plan";
 
 export interface Message {
@@ -9,6 +11,7 @@ export interface Message {
   timestamp: string;
   status: "sending" | "sent" | "streaming" | "done" | "error";
   executionMode?: ExecutionMode;  // "auto" or "plan" — affects agent behavior
+  attachments?: MessageAttachment[];  // file attachments on this message
 }
 
 export interface AblyMessage {
@@ -28,4 +31,6 @@ export interface AblyMessage {
   respondingChain?: string[];   // agentNames that have already responded in this chain
   // Task notifications — informational messages that should not trigger agent responses
   isTaskNotification?: boolean;
+  // File attachments
+  attachments?: MessageAttachment[];
 }

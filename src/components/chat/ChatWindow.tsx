@@ -10,6 +10,8 @@ import { sendMessage } from "@/hooks/useAbly";
 import { getAbly } from "@/lib/ably";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TaskListPanel } from "@/components/tasks/TaskListPanel";
+import { linkAttachmentsToMessage } from "@/lib/attachmentApi";
+import type { MessageAttachment } from "@/types/attachment";
 import type { ExecutionMode, Message } from "@/types/message";
 
 interface ProjectMember {
@@ -135,8 +137,23 @@ export function ChatWindow({ contactId, onBack }: Props) {
     }
   };
 
-  const handleSend = (text: string) => {
-    sendMessage(contactId, text, executionMode);
+  const handleSend = (text: string, attachments?: MessageAttachment[]) => {
+    const messageId = sendMessage(contactId, text, executionMode, attachments);
+
+    // Fire-and-forget: link attachment records to the message on the server
+    if (attachments?.length) {
+      const { token } = useAuthStore.getState();
+      const { apiBaseUrl } = useSettingsStore.getState().settings;
+      if (token && apiBaseUrl) {
+        linkAttachmentsToMessage(
+          apiBaseUrl,
+          token,
+          contactId,
+          attachments.map((a) => a.id),
+          messageId,
+        );
+      }
+    }
   };
 
   const handleCopyProjectId = async () => {
@@ -416,7 +433,7 @@ export function ChatWindow({ contactId, onBack }: Props) {
             </div>
           ) : (
             <>
-              <MessageInput onSend={handleSend} disabled={hasStreamingFromThem} agents={agents} />
+              <MessageInput onSend={handleSend} disabled={hasStreamingFromThem} agents={agents} projectId={contactId} />
               {/* Plan / Auto mode toggle — below input, like Claude Code */}
               <div className="flex items-center pb-2 pt-0" style={{ paddingLeft: "3.75rem" }}>
                 <div className="flex bg-muted/40 rounded-lg p-0.5 text-[11px]">

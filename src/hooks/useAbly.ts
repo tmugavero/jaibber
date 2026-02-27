@@ -12,6 +12,8 @@ import { persistMessage } from "@/lib/messageApi";
 import { updateTask } from "@/lib/taskApi";
 import { useTaskStore } from "@/stores/taskStore";
 import type { AblyMessage, ExecutionMode } from "@/types/message";
+import type { MessageAttachment } from "@/types/attachment";
+import { fetchAttachmentContent, isImageMime, isTextMime, isTextFilename, formatFileSize } from "@/lib/attachmentApi";
 import type { Task } from "@/types/task";
 import type { Contact, AgentInfo } from "@/types/contact";
 import type * as Ably from "ably";
@@ -41,7 +43,8 @@ async function respondToMessage(
   incomingDepth: number,
   incomingChain: string[],
   executionMode: ExecutionMode = "auto",
-  onComplete?: (success: boolean) => void
+  onComplete?: (success: boolean) => void,
+  attachments?: MessageAttachment[],
 ) {
   const convId = contact.id;
   const nextDepth = incomingDepth + 1;
@@ -199,6 +202,28 @@ async function respondToMessage(
     useChatStore.getState().appendChunk(convId, responseId, notice);
   });
 
+  // Inline file attachments into the prompt so the agent can see them
+  let fullPrompt = promptText;
+  if (attachments?.length) {
+    let attachmentContext = "\n\n--- Attached Files ---";
+    const contentPromises = attachments.map(async (att) => {
+      if (isTextMime(att.mimeType) || isTextFilename(att.filename)) {
+        const content = await fetchAttachmentContent(att.blobUrl, att.mimeType, att.filename);
+        if (content) {
+          return `\n[File: ${att.filename}]\n\`\`\`\n${content}\n\`\`\``;
+        }
+        return `\n[File: ${att.filename} (${formatFileSize(att.fileSize)}) — could not fetch content]`;
+      } else if (isImageMime(att.mimeType)) {
+        return `\n[Image: ${att.filename} (${formatFileSize(att.fileSize)}) — URL: ${att.blobUrl}]`;
+      } else {
+        return `\n[File: ${att.filename} (${formatFileSize(att.fileSize)}) — binary file, cannot display contents]`;
+      }
+    });
+    const parts = await Promise.all(contentPromises);
+    attachmentContext += parts.join("");
+    fullPrompt = promptText + attachmentContext;
+  }
+
   // Build system prompt, prepending plan-mode instructions if needed
   let systemPrompt = localProject.agentInstructions || "";
   if (executionMode === "plan") {
@@ -208,7 +233,7 @@ async function respondToMessage(
   // Kick off streaming agent process
   try {
     await runAgentStream({
-      prompt: promptText,
+      prompt: fullPrompt,
       projectDir: localProject.projectDir,
       responseId,
       systemPrompt,
@@ -434,6 +459,7 @@ function subscribeToProjectChannel(
         timestamp: new Date().toISOString(),
         status: "done",
         executionMode: payload.executionMode,
+        attachments: payload.attachments,
       });
 
       // Agent response: check if any local agents should respond (skip task notifications)
@@ -447,7 +473,7 @@ function subscribeToProjectChannel(
           const chain = payload.respondingChain ?? [];
 
           if (shouldAgentRespond(payload.text, name, depth, chain)) {
-            respondToMessage(channel, contact, lp, name, userId, payload.text, depth, chain, payload.executionMode ?? "auto");
+            respondToMessage(channel, contact, lp, name, userId, payload.text, depth, chain, payload.executionMode ?? "auto", undefined, payload.attachments);
           }
         }
       }
@@ -674,7 +700,7 @@ export function useAbly() {
 }
 
 /** Send a chat message to a project channel. Returns the local message id. */
-export function sendMessage(projectId: string, text: string, executionMode: ExecutionMode = "auto"): string {
+export function sendMessage(projectId: string, text: string, executionMode: ExecutionMode = "auto", attachments?: MessageAttachment[]): string {
   const ably = getAbly();
   const { userId, username } = useAuthStore.getState();
   const contact = useContactStore.getState().contacts[projectId];
@@ -689,6 +715,7 @@ export function sendMessage(projectId: string, text: string, executionMode: Exec
     timestamp: new Date().toISOString(),
     status: "sending",
     executionMode,
+    attachments,
   });
 
   if (ably && contact && userId && username) {
@@ -701,6 +728,7 @@ export function sendMessage(projectId: string, text: string, executionMode: Exec
       messageId,
       type: "message",
       executionMode,
+      attachments,
     } satisfies AblyMessage).then(() => {
       useChatStore.getState().updateStatus(projectId, messageId, "sent");
 

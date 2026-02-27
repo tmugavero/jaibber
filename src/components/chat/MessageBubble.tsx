@@ -1,5 +1,7 @@
 import { cn } from "@/lib/cn";
 import type { Message } from "@/types/message";
+import type { MessageAttachment } from "@/types/attachment";
+import { formatFileSize, isImageMime } from "@/lib/attachmentApi";
 import { TypingIndicator } from "./TypingIndicator";
 
 interface Props {
@@ -30,6 +32,64 @@ function renderText(text: string) {
   });
 }
 
+function renderAttachments(attachments: MessageAttachment[] | undefined, isMe: boolean) {
+  if (!attachments?.length) return null;
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      {attachments.map((att) =>
+        isImageMime(att.mimeType) ? (
+          <a
+            key={att.id}
+            href={att.blobUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block"
+          >
+            <img
+              src={att.blobUrl}
+              alt={att.filename}
+              className="max-w-[300px] max-h-[200px] rounded-lg object-cover cursor-pointer hover:opacity-90 transition-opacity"
+              loading="lazy"
+            />
+          </a>
+        ) : (
+          <a
+            key={att.id}
+            href={att.blobUrl}
+            download={att.filename}
+            className={cn(
+              "flex items-center gap-2 rounded-lg p-2 transition-colors",
+              isMe
+                ? "bg-primary-foreground/10 hover:bg-primary-foreground/20"
+                : "bg-muted/50 hover:bg-muted/80",
+            )}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+              <polyline points="14,2 14,8 20,8" />
+            </svg>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-medium truncate">{att.filename}</div>
+              <div className={cn(
+                "text-[10px]",
+                isMe ? "text-primary-foreground/60" : "text-muted-foreground",
+              )}>
+                {formatFileSize(att.fileSize)}
+              </div>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0 opacity-60">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+              <polyline points="7,10 12,15 17,10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+          </a>
+        ),
+      )}
+    </div>
+  );
+}
+
 export function MessageBubble({ message, onCreateTask }: Props) {
   const isMe = message.sender === "me";
   const isStreaming = message.status === "streaming";
@@ -50,6 +110,7 @@ export function MessageBubble({ message, onCreateTask }: Props) {
         ) : (
           <>
             {renderText(message.text)}
+            {renderAttachments(message.attachments, isMe)}
             {isStreaming && <TypingIndicator inline />}
           </>
         )}
