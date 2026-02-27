@@ -7,7 +7,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useProjectStore, type LocalProject } from "@/stores/projectStore";
 import { runAgentStream, listenEvent, isTauri } from "@/lib/platform";
-import { parseMentions } from "@/lib/mentions";
+import { parseMentions, mentionsAgent } from "@/lib/mentions";
 import { persistMessage } from "@/lib/messageApi";
 import { updateTask } from "@/lib/taskApi";
 import { useTaskStore } from "@/stores/taskStore";
@@ -235,7 +235,7 @@ function shouldAgentRespond(
   if (chain.includes(agentName.toLowerCase())) return false;
   // @mention routing: if mentions exist and none match this agent → skip
   const mentions = parseMentions(text);
-  if (mentions.length > 0 && !mentions.includes(agentName.toLowerCase())) return false;
+  if (mentions.length > 0 && !mentionsAgent(text, agentName)) return false;
   return true;
 }
 
@@ -455,11 +455,9 @@ function subscribeToProjectChannel(
           const name = lp.agentName || "Agent";
           const depth = payload.responseDepth ?? 0;
           const chain = payload.respondingChain ?? [];
-          const mentions = parseMentions(payload.text);
-
           // Only respond if explicitly @mentioned (agent-to-agent requires explicit mention)
           if (
-            mentions.includes(name.toLowerCase()) &&
+            mentionsAgent(payload.text, name) &&
             shouldAgentRespond(payload.text, name, depth, chain)
           ) {
             respondToMessage(channel, contact, lp, name, userId, payload.text, depth, chain, "auto");
