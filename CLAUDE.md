@@ -223,6 +223,11 @@ Key endpoints:
 - `GET/PATCH/DELETE /api/projects/[id]` — project CRUD (admin required for write)
 - `POST /api/projects/[id]/members` — add user to project
 - `DELETE /api/projects/[id]/members/[userId]` — remove member (cannot remove last admin)
+- `POST /api/projects/[id]/tasks` — create task; `GET` for paginated list (filter by status/agent)
+- `PATCH /api/tasks/[taskId]` — update task status/priority/assignment; `DELETE` to remove
+- `POST /api/projects/[id]/messages` — send/persist message; `GET` for paginated history
+- `POST /api/orgs/[id]/webhooks` — create webhook (returns secret once); `GET` to list (secrets omitted)
+- `PATCH/DELETE /api/orgs/[id]/webhooks/[webhookId]` — update or remove webhook
 - `POST /api/ably/token` — issue scoped Ably TokenRequest (clientId=userId, scoped to user's project channels)
 - `GET/POST /api/orgs` — organization CRUD
 - `GET /api/orgs/[id]/stats` — usage statistics
@@ -230,8 +235,32 @@ Key endpoints:
 - `POST /api/stripe/checkout` — Stripe checkout session creation
 - `GET /api/stripe/plans` — dynamic plan/pricing fetch
 
-Database: Neon Postgres; tables: `users`, `projects`, `projectMembers`, `orgs`, `orgMembers`
-Auth: HS256 JWT (7-day TTL), bcryptjs password hashing (12 rounds)
+Database: Neon Postgres; tables: `users`, `projects`, `projectMembers`, `orgs`, `orgMembers`, `tasks`, `webhooks`, `agents`, `agentProjectAssignments`, `apiKeys`, `messages`, `usageEvents`, `auditLog`, `orgInvites`, `projectInvites`
+Auth: HS256 JWT (7-day TTL), bcryptjs password hashing (12 rounds); dual auth (JWT sessions + API keys with scope-based access)
+
+### Task System (Wave 3A)
+
+Task statuses: `submitted` → `working` → `completed` | `failed` | `input-required` | `cancelled`. Priorities: `low`, `medium`, `high`, `urgent`.
+
+Frontend: `stores/taskStore.ts` (Zustand, keyed by projectId), `lib/taskApi.ts`, `components/tasks/` (TaskListPanel, TaskCard, TaskDetailPanel, CreateTaskForm). ChatWindow has Chat/Tasks tabs; MessageBubble has "create task from message" button. Real-time sync via Ably task events. Auto-execution: if assigned agent matches local agent, picks up task, runs Claude, updates status.
+
+### Webhook Notifications (Wave 3B)
+
+Webhook table: `id`, `orgId`, `url`, `events` (text[]), `secret`, `status` (active/paused), `createdBy`, `createdAt`.
+
+Dispatch library (`lib/webhooks.ts`):
+- `generateWebhookSecret()` — `whsec_` prefix + 32 random bytes hex
+- `dispatchWebhookEvent(orgId, event, data, projectId?)` — fire-and-forget (same pattern as `logAudit()`)
+- Queries active webhooks via Postgres array contains (`@>`), signs with HMAC-SHA256
+- Headers: `X-Jaibber-Signature: sha256={hex}`, `X-Jaibber-Event`, `X-Jaibber-Delivery`
+- 10s timeout; `Promise.allSettled` for parallel delivery; audit logs each attempt
+
+Events wired: `task.created`, `task.completed`, `task.failed`, `message.created`
+Events defined but deferred: `agent.online`, `agent.offline` (requires Ably presence webhook config)
+
+API key scopes: `messages:read/write`, `tasks:read/write`, `agents:read/write/manage`, `webhooks:manage`
+
+Frontend: Org ID displayed with copy button in AdminConsole header for webhook setup
 
 ### Key Patterns to Remember
 

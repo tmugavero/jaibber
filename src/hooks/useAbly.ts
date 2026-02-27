@@ -256,17 +256,13 @@ function subscribeToProjectChannel(
   const localProject = useProjectStore.getState().projects.find(
     (p) => p.projectId === contact.id
   );
-  const isOwnConnection = (member: { connectionId?: string }) =>
-    member.connectionId != null && member.connectionId === ably.connection.id;
-
   const isAgentMember = (member: { data?: { isAgent?: boolean } }) =>
     member.data?.isAgent === true;
 
   const syncAgents = () => {
     channel.presence.get().then((members) => {
       const allAgents = members.filter((m) => isAgentMember(m));
-      const remoteAgents = allAgents.filter((m) => !isOwnConnection(m));
-      const agentInfos: AgentInfo[] = remoteAgents.map((m) => ({
+      const agentInfos: AgentInfo[] = allAgents.map((m) => ({
         connectionId: m.connectionId ?? "",
         agentName: m.data?.agentName ?? "Agent",
         machineName: m.data?.machineName,

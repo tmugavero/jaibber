@@ -30,6 +30,9 @@ Jaibber fills this gap: a purpose-built app with a first-class messaging transpo
 | Live streaming agent responses | Yes — real-time chunks | No — completion only | No — completion only | Yes | Yes |
 | Conversation continuity (follow-ups) | Yes — context window | No | No | Yes | No |
 | Your own machines & private codebases | Yes | Yes | Yes | No — cloud sandboxes only | Yes |
+| Structured task system | Yes — CRUD + auto-execution | No | No | No | No |
+| Webhook notifications (HMAC-signed) | Yes — task + message events | No | No | No | No |
+| REST API with scoped API keys | Yes — full CRUD + rate limiting | No | No | No | No |
 | Dedicated desktop + web UI | Yes — Tauri native + browser | No | No — Telegram/Discord | No — browser only | No — web UI |
 | Cross-platform agents | Yes — Win + Mac + Linux | Depends on VPN | Yes | No | Yes |
 | Anthropic policy compliant | Yes | Yes | Varies | Yes | Yes |
@@ -81,6 +84,55 @@ Every user registers a Jaibber account (username/password or GitHub OAuth). Proj
 ### Organization Management & Billing
 
 Create organizations to group users and projects. Org owners and admins have access to the admin console with usage statistics, agent monitoring, and member management. Billing integrates with Stripe for per-seat subscription plans with pricing fetched dynamically.
+
+### Task System
+
+Go beyond chat with structured work. Create tasks with titles, descriptions, priority levels (low/medium/high/urgent), and agent assignments. Tasks flow through a lifecycle: `submitted` → `working` → `completed` (or `failed`, `input-required`, `cancelled`).
+
+- **Create from chat** — turn any message into a task with one click
+- **Auto-execution** — assign a task to an agent and it picks it up automatically, runs Claude, and updates the status
+- **Real-time sync** — task creation, updates, and deletion sync instantly across all project members via Ably
+- **Filterable views** — filter by status or assigned agent; tasks live alongside chat in a tabbed interface
+- **Full API** — create, list, update, and delete tasks programmatically via REST with scoped API keys
+
+```
+@Coder implement the login page
+→ Turn message into task → assign to Coder → auto-executes → status: completed
+```
+
+### Webhook Notifications
+
+Connect Jaibber to your external systems with HMAC-signed outbound webhooks. Get notified when things happen — tasks complete, messages arrive, agents come online — without polling.
+
+- **Per-org webhook management** — create webhooks scoped to your organization; subscribe to specific event types
+- **HMAC-SHA256 signatures** — every payload is signed with your webhook secret (`X-Jaibber-Signature: sha256=...`) so you can verify authenticity
+- **Event types** — `task.created`, `task.completed`, `task.failed`, `message.created` (with `agent.online`/`agent.offline` coming soon)
+- **Pause & resume** — toggle webhooks active/paused without deleting them
+- **Fire-and-forget delivery** — dispatched asynchronously with 10-second timeouts; doesn't slow down API responses
+- **Audit trail** — every dispatch (success or failure) is logged for observability
+
+Example: set up a Slack integration that posts when a task completes, trigger CI/CD when an agent finishes a code task, or feed events into your monitoring dashboard.
+
+```bash
+# Create a webhook
+POST /api/orgs/{orgId}/webhooks
+{ "url": "https://your-server.com/hooks/jaibber", "events": ["task.completed", "message.created"] }
+# → Returns webhook ID + secret (shown once)
+
+# Payload delivered to your URL:
+{
+  "event": "task.completed",
+  "timestamp": "2026-02-27T01:11:27Z",
+  "orgId": "...",
+  "projectId": "...",
+  "data": { "task": { "id": "...", "title": "Implement login page", "status": "completed", ... } }
+}
+# Headers: X-Jaibber-Signature, X-Jaibber-Event, X-Jaibber-Delivery
+```
+
+### REST API & API Keys
+
+A comprehensive REST API with scoped API keys for programmatic access. Create API keys with fine-grained permissions (`messages:read/write`, `tasks:read/write`, `agents:read/write/manage`, `webhooks:manage`) and per-key rate limiting. All endpoints return standardized JSON envelopes with pagination, rate limit headers, and request IDs.
 
 ### Dual Platform: Desktop + Web
 
@@ -313,6 +365,9 @@ Jaibber is the only product that combines all of:
 6. Streaming responses with conversation continuity
 7. Local agent execution on your own machines with your own codebase
 8. Cross-platform agent cooperation (Windows + macOS + Linux)
+9. Structured task system with auto-execution and lifecycle management
+10. HMAC-signed webhook notifications for external system integration
+11. A full REST API with scoped API keys and rate limiting
 
 ---
 
@@ -338,12 +393,19 @@ Jaibber is the only product that combines all of:
 
 ## Roadmap
 
+### Shipped
+- **Wave 1** — Project invites, agent-to-agent messaging, landing page
+- **Wave 2** — REST API with scoped API keys, message persistence, agent registration, rate limiting, audit logging, capabilities system
+- **Wave 3A** — Task system: full CRUD, real-time sync, auto-execution on assignment, create-from-message, filterable task views
+- **Wave 3B** — Webhook notifications: HMAC-signed outbound webhooks for task and message events, pause/resume, audit trail
+
+### Coming Next
+- **Artifacts & file sharing** — upload files, attach to tasks or messages, render diffs in chat
+- **Headless agent SDK** (`@jaibber/sdk`) — lightweight TypeScript SDK wrapping REST + Ably for building custom agents without the desktop app
+- **A2A agent cards & registry** — A2A-compatible agent discovery, public registry with tags and capabilities
+- **Usage metering & credits** — per-API-call credit deduction, spending caps, balance tracking
+- **Agent presence webhooks** — `agent.online`/`agent.offline` event notifications
 - **Mobile companion app** — iOS/Android for approving agent actions and monitoring on the go
-- **Approval UI** — show diffs and prompt for confirmation before the agent writes files or runs commands
-- **Slash commands** — `/status`, `/files`, `/cancel`, `/approve` in the chat input
-- **Voice notes** — record audio → Whisper transcription → prompt
-- **Usage tracking** — per-project token cost and invocation count
-- **Webhook notifications** — email or Slack pings when a long agent task completes
 - **Self-hostable transport** — Soketi or Centrifugo as a drop-in Ably alternative
 - **Session resume** — `claude --resume` support for long-running multi-turn sessions
 
