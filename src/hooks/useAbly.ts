@@ -450,12 +450,26 @@ function subscribeToProjectChannel(
     } else if (payload.type === "response" || payload.type === "done" || payload.type === "error") {
       if (isFromThisConnection) return;
       const isError = payload.type === "error";
-      useChatStore.getState().replaceMessage(
-        convId,
-        payload.messageId,
-        payload.text,
-        isError ? "error" : "done"
+
+      // Check if there's an existing streaming bubble to replace (normal agent flow).
+      // If not, this is from an external agent (REST API) — create a new message.
+      const store = useChatStore.getState();
+      const existing = (store.messages[convId] ?? []).find(
+        (m) => m.id === payload.messageId
       );
+      if (existing) {
+        store.replaceMessage(convId, payload.messageId, payload.text, isError ? "error" : "done");
+      } else {
+        store.addMessage({
+          id: payload.messageId,
+          conversationId: convId,
+          sender: isMine ? "me" : "them",
+          senderName: payload.fromUsername,
+          text: payload.text,
+          timestamp: new Date().toISOString(),
+          status: isError ? "error" : "done",
+        });
+      }
 
       // Agent-to-agent: if a completed response @mentions this agent, respond.
       // The response is already displayed — just trigger a new agent response.

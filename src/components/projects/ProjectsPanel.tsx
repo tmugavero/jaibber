@@ -22,6 +22,11 @@ const PROVIDER_OPTIONS = [
   { value: "custom", label: "Custom" },
 ] as const;
 
+/** Strip spaces from agent names so @mentions work (e.g. "Coding Agent" → "CodingAgent") */
+function sanitizeAgentName(name: string): string {
+  return name.replace(/\s+/g, "");
+}
+
 const PROVIDER_LABELS: Record<string, string> = {
   claude: "Claude",
   codex: "Codex",
@@ -194,7 +199,7 @@ function ProjectCard({ contact }: { contact: Contact }) {
     if (!localProject) return;
     const updated: LocalProject = {
       ...localProject,
-      agentName: editAgentName.trim() || defaultAgentName,
+      agentName: sanitizeAgentName(editAgentName.trim()) || defaultAgentName,
       agentInstructions: editAgentInstructions.trim(),
       agentProvider: editAgentProvider,
       customCommand: editAgentProvider === "custom" ? editCustomCommand.trim() : undefined,
@@ -211,7 +216,7 @@ function ProjectCard({ contact }: { contact: Contact }) {
       name: contact.name,
       projectDir: linkDir.trim(),
       ablyChannelName: contact.ablyChannelName,
-      agentName: linkAgentName.trim() || defaultAgentName,
+      agentName: sanitizeAgentName(linkAgentName.trim()) || defaultAgentName,
       agentInstructions: linkAgentInstructions.trim(),
       agentProvider: linkAgentProvider,
       customCommand: linkAgentProvider === "custom" ? linkCustomCommand.trim() : undefined,
@@ -723,7 +728,7 @@ export function ProjectsPanel() {
           name: p.name,
           projectDir: newProjectDir.trim(),
           ablyChannelName: p.ablyChannelName,
-          agentName: newAgentName.trim() || defaultAgentName,
+          agentName: sanitizeAgentName(newAgentName.trim()) || defaultAgentName,
           agentInstructions: newAgentInstructions.trim(),
           agentProvider: newAgentProvider,
           customCommand: newAgentProvider === "custom" ? newCustomCommand.trim() : undefined,
