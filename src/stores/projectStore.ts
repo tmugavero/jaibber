@@ -15,6 +15,9 @@ interface ProjectStore {
   projects: LocalProject[];
   setProjects: (projects: LocalProject[]) => void;
   addProject: (p: LocalProject) => void;
+  /** Remove a specific agent from a project (by projectId + agentName). */
+  removeAgent: (projectId: string, agentName: string) => void;
+  /** Remove ALL agents for a project (used for leave/delete project). */
   removeProject: (projectId: string) => void;
 }
 
@@ -23,10 +26,18 @@ export const useProjectStore = create<ProjectStore>((set) => ({
   setProjects: (projects) => set({ projects }),
   addProject: (p) =>
     set((s) => {
-      // Replace if already exists (update projectDir)
-      const filtered = s.projects.filter((x) => x.projectId !== p.projectId);
+      // Replace if same projectId + agentName combo exists (update config)
+      const filtered = s.projects.filter(
+        (x) => !(x.projectId === p.projectId && x.agentName === p.agentName)
+      );
       return { projects: [...filtered, p] };
     }),
+  removeAgent: (projectId, agentName) =>
+    set((s) => ({
+      projects: s.projects.filter(
+        (p) => !(p.projectId === projectId && p.agentName === agentName)
+      ),
+    })),
   removeProject: (projectId) =>
     set((s) => ({ projects: s.projects.filter((p) => p.projectId !== projectId) })),
 }));

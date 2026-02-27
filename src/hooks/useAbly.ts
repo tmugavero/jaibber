@@ -249,9 +249,8 @@ function shouldAgentRespond(
   if (depth >= MAX_RESPONSE_DEPTH) return false;
   // Loop prevention: already responded in this chain
   if (chain.includes(agentName.toLowerCase())) return false;
-  // @mention routing: if mentions exist and none match this agent → skip
-  const mentions = parseMentions(text);
-  if (mentions.length > 0 && !mentionsAgent(text, agentName)) return false;
+  // @mention routing: agent only responds when explicitly @mentioned
+  if (!mentionsAgent(text, agentName)) return false;
   return true;
 }
 
@@ -269,7 +268,7 @@ function subscribeToProjectChannel(
     params: { rewind: "2m" },
   });
 
-  const localProject = useProjectStore.getState().projects.find(
+  const localAgents = useProjectStore.getState().projects.filter(
     (p) => p.projectId === contact.id
   );
   const isAgentMember = (member: { data?: { isAgent?: boolean } }) =>
@@ -277,26 +276,45 @@ function subscribeToProjectChannel(
 
   const syncAgents = () => {
     channel.presence.get().then((members) => {
-      const allAgents = members.filter((m) => isAgentMember(m));
-      const agentInfos: AgentInfo[] = allAgents.map((m) => ({
-        connectionId: m.connectionId ?? "",
-        agentName: m.data?.agentName ?? "Agent",
-        machineName: m.data?.machineName,
-        agentInstructions: m.data?.agentInstructions,
-      }));
+      const allAgentMembers = members.filter((m) => isAgentMember(m));
+      // Flatten: each presence member may carry multiple agents
+      const agentInfos: AgentInfo[] = allAgentMembers.flatMap((m) => {
+        const agentsArr = m.data?.agents as Array<{ agentName: string; agentInstructions?: string }> | undefined;
+        if (Array.isArray(agentsArr) && agentsArr.length > 0) {
+          return agentsArr.map((a) => ({
+            connectionId: m.connectionId ?? "",
+            agentName: a.agentName ?? "Agent",
+            machineName: m.data?.machineName,
+            agentInstructions: a.agentInstructions,
+          }));
+        }
+        // Backward compat: single agent entry
+        return [{
+          connectionId: m.connectionId ?? "",
+          agentName: m.data?.agentName ?? "Agent",
+          machineName: m.data?.machineName,
+          agentInstructions: m.data?.agentInstructions,
+        }];
+      });
       useContactStore.getState().setOnlineAgents(contact.id, agentInfos);
-      useContactStore.getState().setOnline(contact.id, allAgents.length > 0);
+      useContactStore.getState().setOnline(contact.id, agentInfos.length > 0);
     }).catch(() => {});
   };
 
-  // Enter presence, then run initial sync once enter completes
+  // Enter presence with all local agents for this project
   channel.presence.enter({
     userId,
     username,
-    isAgent: !!localProject,
-    agentName: localProject?.agentName || undefined,
-    agentInstructions: localProject?.agentInstructions || undefined,
-    machineName: localProject ? useSettingsStore.getState().settings.machineName : undefined,
+    isAgent: localAgents.length > 0,
+    // Backward compat: first agent as primary fields
+    agentName: localAgents[0]?.agentName || undefined,
+    agentInstructions: localAgents[0]?.agentInstructions || undefined,
+    // Multi-agent: full list
+    agents: localAgents.map((lp) => ({
+      agentName: lp.agentName,
+      agentInstructions: lp.agentInstructions,
+    })),
+    machineName: localAgents.length > 0 ? useSettingsStore.getState().settings.machineName : undefined,
   }).then(() => syncAgents()).catch(() => {});
 
   channel.presence.subscribe("enter", (member) => {
@@ -340,9 +358,10 @@ function subscribeToProjectChannel(
         data.task.assignedAgentName
       ) {
         const lp = useProjectStore.getState().projects.find(
-          (p) => p.projectId === contact.id
+          (p) => p.projectId === contact.id &&
+            p.agentName.toLowerCase() === data.task.assignedAgentName!.toLowerCase()
         );
-        if (lp && lp.agentName.toLowerCase() === data.task.assignedAgentName.toLowerCase()) {
+        if (lp) {
           const { token: tkn } = useAuthStore.getState();
           const { apiBaseUrl: base } = useSettingsStore.getState().settings;
 
@@ -417,12 +436,12 @@ function subscribeToProjectChannel(
         executionMode: payload.executionMode,
       });
 
-      // Agent response: check if this machine should respond (skip task notifications)
+      // Agent response: check if any local agents should respond (skip task notifications)
       if (isTauri && !payload.isTaskNotification) {
-        const lp = useProjectStore.getState().projects.find(
+        const lps = useProjectStore.getState().projects.filter(
           (p) => p.projectId === contact.id
         );
-        if (lp) {
+        for (const lp of lps) {
           const name = lp.agentName || "Agent";
           const depth = payload.responseDepth ?? 0;
           const chain = payload.respondingChain ?? [];
@@ -471,13 +490,13 @@ function subscribeToProjectChannel(
         });
       }
 
-      // Agent-to-agent: if a completed response @mentions this agent, respond.
+      // Agent-to-agent: if a completed response @mentions any local agent, respond.
       // The response is already displayed — just trigger a new agent response.
       if (!isError && payload.isAgentMessage && payload.text && isTauri) {
-        const lp = useProjectStore.getState().projects.find(
+        const lps = useProjectStore.getState().projects.filter(
           (p) => p.projectId === contact.id
         );
-        if (lp) {
+        for (const lp of lps) {
           const name = lp.agentName || "Agent";
           const depth = payload.responseDepth ?? 0;
           const chain = payload.respondingChain ?? [];
@@ -609,12 +628,37 @@ export function useAbly() {
       const { userId: uid, username: uname } = useAuthStore.getState();
       if (!uid || !uname) return;
       const lps = useProjectStore.getState().projects;
+      const contacts = useContactStore.getState().contacts;
+
+      // Update global presence
       const pc = ably.channels.get("jaibber:presence");
       pc.presence.update({
         userId: uid,
         username: uname,
         projectIds: lps.map((p) => p.projectId),
       });
+
+      // Update per-project channel presence with current agents list
+      for (const [channelName] of channelCleanupsRef.current) {
+        const contact = Object.values(contacts).find((c) => c.ablyChannelName === channelName);
+        if (!contact) continue;
+        const projectAgents = lps.filter((p) => p.projectId === contact.id);
+        const channel = ably.channels.get(channelName);
+        channel.presence.update({
+          userId: uid,
+          username: uname,
+          isAgent: projectAgents.length > 0,
+          agentName: projectAgents[0]?.agentName || undefined,
+          agentInstructions: projectAgents[0]?.agentInstructions || undefined,
+          agents: projectAgents.map((lp) => ({
+            agentName: lp.agentName,
+            agentInstructions: lp.agentInstructions,
+          })),
+          machineName: projectAgents.length > 0
+            ? useSettingsStore.getState().settings.machineName
+            : undefined,
+        });
+      }
     });
 
     return () => {

@@ -69,20 +69,20 @@ interface ProjectInvite {
 }
 
 function ProjectCard({ contact }: { contact: Contact }) {
-  const localProjects = useProjectStore((s) => s.projects);
+  const allLocalProjects = useProjectStore((s) => s.projects);
   const messages = useChatStore((s) => s.messages[contact.id]);
-  const localProject = localProjects.find((p) => p.projectId === contact.id);
+  const localAgents = allLocalProjects.filter((p) => p.projectId === contact.id);
   const msgCount = messages?.length ?? 0;
   const agents = contact.onlineAgents ?? [];
 
-  // Edit state for local agent config
-  const [editing, setEditing] = useState(false);
+  // Track which agent is being edited (by agentName), or null if none
+  const [editingAgent, setEditingAgent] = useState<string | null>(null);
   const [editAgentName, setEditAgentName] = useState("");
   const [editAgentInstructions, setEditAgentInstructions] = useState("");
   const [editAgentProvider, setEditAgentProvider] = useState("claude");
   const [editCustomCommand, setEditCustomCommand] = useState("");
 
-  // Link state for registering on this machine
+  // Link state for registering a new agent on this machine
   const [linking, setLinking] = useState(false);
   const [linkDir, setLinkDir] = useState("");
   const [linkAgentName, setLinkAgentName] = useState("");
@@ -101,8 +101,22 @@ function ProjectCard({ contact }: { contact: Contact }) {
 
   const [joining, setJoining] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{ title: string; description: string; onConfirm: () => void; variant?: "destructive" } | null>(null);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const defaultAgentName = useSettingsStore.getState().settings.machineName || "Agent";
+
+  /** Check if an agent name conflicts with existing agents in this project. */
+  const isNameTaken = (name: string, excludeCurrentName?: string): boolean => {
+    const lower = name.toLowerCase();
+    // Check local agents on this machine
+    const localConflict = localAgents.some(
+      (a) => a.agentName.toLowerCase() === lower && a.agentName !== excludeCurrentName
+    );
+    if (localConflict) return true;
+    // Check online agents from other machines
+    return agents.some((a) => a.agentName.toLowerCase() === lower);
+  };
   const currentUserId = useAuthStore((s) => s.userId);
   const isAdmin = contact.role === "admin";
   const isOrgAdmin = contact.role === "org-admin";
@@ -189,36 +203,62 @@ function ProjectCard({ contact }: { contact: Contact }) {
     setTimeout(() => setCopiedInviteId(null), 2000);
   };
 
-  const handleStartEdit = () => {
-    setEditAgentName(localProject?.agentName || "");
-    setEditAgentInstructions(localProject?.agentInstructions || "");
-    setEditAgentProvider(localProject?.agentProvider || "claude");
-    setEditCustomCommand(localProject?.customCommand || "");
-    setEditing(true);
+  const handleStartEdit = (lp: LocalProject) => {
+    setEditAgentName(lp.agentName || "");
+    setEditAgentInstructions(lp.agentInstructions || "");
+    setEditAgentProvider(lp.agentProvider || "claude");
+    setEditCustomCommand(lp.customCommand || "");
+    setEditingAgent(lp.agentName);
   };
 
   const handleSaveEdit = () => {
-    if (!localProject) return;
+    setEditError(null);
+    const lp = localAgents.find((a) => a.agentName === editingAgent);
+    if (!lp) return;
+    const newName = sanitizeAgentName(editAgentName.trim());
+    if (!newName) {
+      setEditError("Agent name is required.");
+      return;
+    }
+    if (newName !== lp.agentName && isNameTaken(newName)) {
+      setEditError(`An agent named "${newName}" already exists in this project.`);
+      return;
+    }
+    // If agent name changed, remove the old entry first
+    if (newName !== lp.agentName) {
+      useProjectStore.getState().removeAgent(contact.id, lp.agentName);
+    }
     const updated: LocalProject = {
-      ...localProject,
-      agentName: sanitizeAgentName(editAgentName.trim()) || defaultAgentName,
+      ...lp,
+      agentName: newName,
       agentInstructions: editAgentInstructions.trim(),
       agentProvider: editAgentProvider,
       customCommand: editAgentProvider === "custom" ? editCustomCommand.trim() : undefined,
     };
     useProjectStore.getState().addProject(updated);
     saveProjects(useProjectStore.getState().projects);
-    setEditing(false);
+    setEditingAgent(null);
+    setEditError(null);
   };
 
   const handleLink = () => {
-    if (!linkDir.trim()) return;
+    setLinkError(null);
+    if (linkAgentProvider !== "openclaw" && !linkDir.trim()) return;
+    const name = sanitizeAgentName(linkAgentName.trim());
+    if (!name) {
+      setLinkError("Agent name is required.");
+      return;
+    }
+    if (isNameTaken(name)) {
+      setLinkError(`An agent named "${name}" already exists in this project.`);
+      return;
+    }
     const lp: LocalProject = {
       projectId: contact.id,
       name: contact.name,
-      projectDir: linkDir.trim(),
+      projectDir: linkDir.trim() || "",
       ablyChannelName: contact.ablyChannelName,
-      agentName: sanitizeAgentName(linkAgentName.trim()) || defaultAgentName,
+      agentName: name,
       agentInstructions: linkAgentInstructions.trim(),
       agentProvider: linkAgentProvider,
       customCommand: linkAgentProvider === "custom" ? linkCustomCommand.trim() : undefined,
@@ -231,11 +271,12 @@ function ProjectCard({ contact }: { contact: Contact }) {
     setLinkAgentInstructions("");
     setLinkAgentProvider("claude");
     setLinkCustomCommand("");
+    setLinkError(null);
   };
 
-  const handleUnlink = () => {
-    useProjectStore.getState().removeProject(contact.id);
-    saveProjects(useProjectStore.getState().projects.filter((x) => x.projectId !== contact.id));
+  const handleUnlink = (agentName: string) => {
+    useProjectStore.getState().removeAgent(contact.id, agentName);
+    saveProjects(useProjectStore.getState().projects);
   };
 
   const handleLeaveProject = () => {
@@ -463,121 +504,136 @@ function ProjectCard({ contact }: { contact: Contact }) {
         </div>
       )}
 
-      {/* Local agent config — desktop only, not for org-admin view-only */}
-      {!isOrgAdmin && isTauri && localProject && !editing && (
-        <div className="border-t border-border/50 bg-muted/10 px-3 py-2 space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-primary/80 font-medium">
-              Agent: {localProject.agentName || defaultAgentName}
-            </span>
-            {localProject.agentProvider && localProject.agentProvider !== "claude" && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground font-medium">
-                {PROVIDER_LABELS[localProject.agentProvider] || localProject.agentProvider}
-              </span>
+      {/* Local agents — desktop only, not for org-admin view-only */}
+      {!isOrgAdmin && isTauri && localAgents.map((lp) => (
+        editingAgent === lp.agentName ? (
+          /* Edit form for this agent */
+          <div key={lp.agentName} className="border-t border-border/50 bg-muted/10 px-3 py-2 space-y-2">
+            <input
+              type="text"
+              value={editAgentName}
+              onChange={(e) => { setEditAgentName(e.target.value); setEditError(null); }}
+              placeholder="Agent name (required, no spaces)"
+              className={inputClass + " text-xs"}
+            />
+            <ProviderSelect value={editAgentProvider} onChange={setEditAgentProvider} inputClass={inputClass} />
+            {editAgentProvider === "custom" && (
+              <div>
+                <label className="block text-[10px] text-muted-foreground mb-0.5">
+                  Command template <span className="opacity-60">(use {"{prompt}"} as placeholder)</span>
+                </label>
+                <input
+                  type="text"
+                  value={editCustomCommand}
+                  onChange={(e) => setEditCustomCommand(e.target.value)}
+                  placeholder='e.g. my-agent --prompt {prompt}'
+                  className={inputClass + " text-xs font-mono"}
+                />
+              </div>
             )}
-            <span className="text-[10px] text-muted-foreground font-mono truncate flex-1">
-              {localProject.projectDir}
-            </span>
-            <button
-              onClick={handleStartEdit}
-              className="text-[11px] text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-            >
-              Edit
-            </button>
-            <button
-              onClick={handleUnlink}
-              className="text-[11px] text-destructive hover:text-destructive/80 transition-colors flex-shrink-0"
-            >
-              Unlink
-            </button>
-          </div>
-          {localProject.agentInstructions && (
-            <div className="text-[11px] text-muted-foreground line-clamp-2">
-              {localProject.agentInstructions}
+            <textarea
+              value={editAgentInstructions}
+              onChange={(e) => setEditAgentInstructions(e.target.value)}
+              placeholder="Agent instructions (supports markdown)..."
+              rows={6}
+              className={inputClass + " text-xs resize-y min-h-[60px] max-h-[300px]"}
+            />
+            {editError && (
+              <p className="text-[10px] text-destructive">{editError}</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setEditingAgent(null); setEditError(null); }}
+                className="px-2.5 py-1 rounded text-[11px] font-medium text-muted-foreground bg-muted/40 hover:bg-muted/60 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={!editAgentName.trim()}
+                className="px-2.5 py-1 rounded text-[11px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >
+                Save
+              </button>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Edit form */}
-      {isTauri && localProject && editing && (
-        <div className="border-t border-border/50 bg-muted/10 px-3 py-2 space-y-2">
-          <input
-            type="text"
-            value={editAgentName}
-            onChange={(e) => setEditAgentName(e.target.value)}
-            placeholder={`Agent name (default: ${defaultAgentName})`}
-            className={inputClass + " text-xs"}
-          />
-          <ProviderSelect value={editAgentProvider} onChange={setEditAgentProvider} inputClass={inputClass} />
-          {editAgentProvider === "custom" && (
-            <div>
-              <label className="block text-[10px] text-muted-foreground mb-0.5">
-                Command template <span className="opacity-60">(use {"{prompt}"} as placeholder)</span>
-              </label>
-              <input
-                type="text"
-                value={editCustomCommand}
-                onChange={(e) => setEditCustomCommand(e.target.value)}
-                placeholder='e.g. my-agent --prompt {prompt}'
-                className={inputClass + " text-xs font-mono"}
-              />
-            </div>
-          )}
-          <textarea
-            value={editAgentInstructions}
-            onChange={(e) => setEditAgentInstructions(e.target.value)}
-            placeholder="Agent instructions (supports markdown)..."
-            rows={6}
-            className={inputClass + " text-xs resize-y min-h-[60px] max-h-[300px]"}
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={() => setEditing(false)}
-              className="px-2.5 py-1 rounded text-[11px] font-medium text-muted-foreground bg-muted/40 hover:bg-muted/60 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSaveEdit}
-              className="px-2.5 py-1 rounded text-[11px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-            >
-              Save
-            </button>
           </div>
-        </div>
-      )}
+        ) : (
+          /* Display row for this agent */
+          <div key={lp.agentName} className="border-t border-border/50 bg-muted/10 px-3 py-2 space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-primary/80 font-medium">
+                Agent: {lp.agentName || defaultAgentName}
+              </span>
+              {lp.agentProvider && lp.agentProvider !== "claude" && (
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground font-medium">
+                  {PROVIDER_LABELS[lp.agentProvider] || lp.agentProvider}
+                </span>
+              )}
+              <span className="text-[10px] text-muted-foreground font-mono truncate flex-1">
+                {lp.agentProvider === "openclaw" ? "local gateway" : lp.projectDir}
+              </span>
+              <button
+                onClick={() => handleStartEdit(lp)}
+                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => handleUnlink(lp.agentName)}
+                className="text-[11px] text-destructive hover:text-destructive/80 transition-colors flex-shrink-0"
+              >
+                Unlink
+              </button>
+            </div>
+            {lp.agentInstructions && (
+              <div className="text-[11px] text-muted-foreground line-clamp-2">
+                {lp.agentInstructions}
+              </div>
+            )}
+          </div>
+        )
+      ))}
 
-      {/* Link to this machine — desktop only, not yet registered, not org-admin view-only */}
-      {!isOrgAdmin && isTauri && !localProject && !linking && (
+      {/* Add agent button — desktop only, not org-admin */}
+      {!isOrgAdmin && isTauri && !linking && (
         <div className="border-t border-border/50 px-3 py-2">
           <button
             onClick={() => setLinking(true)}
             className="text-[11px] text-primary/70 hover:text-primary transition-colors"
           >
-            + Register agent on this machine
+            + {localAgents.length > 0 ? "Add another agent" : "Register agent on this machine"}
           </button>
         </div>
       )}
 
-      {!isOrgAdmin && isTauri && !localProject && linking && (
+      {!isOrgAdmin && isTauri && linking && (
         <div className="border-t border-border/50 bg-muted/10 px-3 py-2 space-y-2">
-          <p className="text-[11px] font-medium text-foreground">Register agent</p>
-          <input
-            type="text"
-            value={linkDir}
-            onChange={(e) => setLinkDir(e.target.value)}
-            placeholder="Local path, e.g. C:\Users\you\Code\my-project"
-            className={inputClass + " text-xs font-mono"}
-          />
+          <p className="text-[11px] font-medium text-foreground">
+            {localAgents.length > 0 ? "Add another agent" : "Register agent"}
+          </p>
           <input
             type="text"
             value={linkAgentName}
-            onChange={(e) => setLinkAgentName(e.target.value)}
-            placeholder={`Agent name (default: ${defaultAgentName})`}
+            onChange={(e) => { setLinkAgentName(e.target.value); setLinkError(null); }}
+            placeholder="Agent name (required, no spaces)"
             className={inputClass + " text-xs"}
           />
           <ProviderSelect value={linkAgentProvider} onChange={setLinkAgentProvider} inputClass={inputClass} />
+          {linkAgentProvider === "openclaw" && (
+            <p className="text-[10px] text-muted-foreground">
+              Auto-connects to your local OpenClaw gateway. Make sure it&apos;s running
+              (<span className="font-mono">openclaw gateway start</span>).
+            </p>
+          )}
+          {linkAgentProvider !== "openclaw" && (
+            <input
+              type="text"
+              value={linkDir}
+              onChange={(e) => setLinkDir(e.target.value)}
+              placeholder="Local path, e.g. C:\Users\you\Code\my-project"
+              className={inputClass + " text-xs font-mono"}
+            />
+          )}
           {linkAgentProvider === "custom" && (
             <div>
               <label className="block text-[10px] text-muted-foreground mb-0.5">
@@ -599,16 +655,19 @@ function ProjectCard({ contact }: { contact: Contact }) {
             rows={6}
             className={inputClass + " text-xs resize-y min-h-[60px] max-h-[300px]"}
           />
+          {linkError && (
+            <p className="text-[10px] text-destructive">{linkError}</p>
+          )}
           <div className="flex gap-2">
             <button
-              onClick={() => { setLinking(false); setLinkDir(""); }}
+              onClick={() => { setLinking(false); setLinkDir(""); setLinkError(null); }}
               className="px-2.5 py-1 rounded text-[11px] font-medium text-muted-foreground bg-muted/40 hover:bg-muted/60 transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={handleLink}
-              disabled={!linkDir.trim()}
+              disabled={!linkAgentName.trim() || (linkAgentProvider !== "openclaw" && !linkDir.trim())}
               className="px-2.5 py-1 rounded text-[11px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               Link
@@ -688,7 +747,11 @@ export function ProjectsPanel() {
       setError("Project name is required.");
       return;
     }
-    if (isTauri && !newProjectDir.trim()) {
+    if (isTauri && !sanitizeAgentName(newAgentName.trim())) {
+      setError("Agent name is required.");
+      return;
+    }
+    if (isTauri && newAgentProvider !== "openclaw" && !newProjectDir.trim()) {
       setError("Local directory is required.");
       return;
     }
@@ -724,13 +787,13 @@ export function ProjectsPanel() {
         memberCount: 1,
       });
 
-      if (isTauri && newProjectDir.trim()) {
+      if (isTauri && (newProjectDir.trim() || newAgentProvider === "openclaw")) {
         const newLocal: LocalProject = {
           projectId: p.id,
           name: p.name,
-          projectDir: newProjectDir.trim(),
+          projectDir: newProjectDir.trim() || "",
           ablyChannelName: p.ablyChannelName,
-          agentName: sanitizeAgentName(newAgentName.trim()) || defaultAgentName,
+          agentName: sanitizeAgentName(newAgentName.trim()),
           agentInstructions: newAgentInstructions.trim(),
           agentProvider: newAgentProvider,
           customCommand: newAgentProvider === "custom" ? newCustomCommand.trim() : undefined,
@@ -823,19 +886,27 @@ export function ProjectsPanel() {
             <>
               <input
                 type="text"
-                value={newProjectDir}
-                onChange={(e) => setNewProjectDir(e.target.value)}
-                placeholder="Local path, e.g. C:\Users\you\Code\my-project"
-                className={inputClass + " font-mono"}
-              />
-              <input
-                type="text"
                 value={newAgentName}
                 onChange={(e) => setNewAgentName(e.target.value)}
-                placeholder={`Agent name (default: ${defaultAgentName})`}
+                placeholder="Agent name (required, no spaces)"
                 className={inputClass}
               />
               <ProviderSelect value={newAgentProvider} onChange={setNewAgentProvider} inputClass={inputClass} />
+              {newAgentProvider === "openclaw" && (
+                <p className="text-[10px] text-muted-foreground">
+                  Auto-connects to your local OpenClaw gateway. Make sure it&apos;s running
+                  (<span className="font-mono">openclaw gateway start</span>).
+                </p>
+              )}
+              {newAgentProvider !== "openclaw" && (
+                <input
+                  type="text"
+                  value={newProjectDir}
+                  onChange={(e) => setNewProjectDir(e.target.value)}
+                  placeholder="Local path, e.g. C:\Users\you\Code\my-project"
+                  className={inputClass + " font-mono"}
+                />
+              )}
               {newAgentProvider === "custom" && (
                 <div>
                   <label className="block text-[10px] text-muted-foreground mb-0.5">

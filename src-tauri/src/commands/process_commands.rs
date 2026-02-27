@@ -116,15 +116,16 @@ pub async fn run_agent_stream(
     window: tauri::Window,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), JaibberError> {
-    if project_dir.is_empty() {
-        return Err(JaibberError::Other("project_dir must not be empty".into()));
-    }
-
     let provider_str = agent_provider.as_deref().unwrap_or("claude");
     let provider = ProviderConfig {
         kind: ProviderKind::from_str(provider_str),
         custom_command: custom_command.clone(),
     };
+
+    // OpenClaw uses HTTP — doesn't need a project_dir. CLI providers do.
+    if provider.kind != ProviderKind::OpenClaw && project_dir.is_empty() {
+        return Err(JaibberError::Other("project_dir must not be empty".into()));
+    }
 
     // Read fallback keys from settings
     let settings = state.settings.read().await;
