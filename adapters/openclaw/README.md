@@ -18,21 +18,39 @@ Jaibber Cloud ──webhook──► Adapter (local) ──HTTP──► OpenCla
 
 ### Enable OpenClaw HTTP API
 
-Add this to your OpenClaw config (`~/.openclaw/config.json`):
+Edit your OpenClaw config (`~/.openclaw/openclaw.json` on Windows, `~/.openclaw/openclaw.json` on macOS/Linux). Add the `http` block inside the existing `gateway` section:
 
 ```json
 {
   "gateway": {
     "http": {
       "endpoints": {
-        "chatCompletions": true
+        "chatCompletions": {
+          "enabled": true
+        },
+        "responses": {
+          "enabled": true
+        }
       }
     }
   }
 }
 ```
 
-Then restart the OpenClaw gateway: `openclaw gateway`
+Then restart the gateway:
+```bash
+openclaw gateway start    # or: openclaw gateway restart
+```
+
+Verify it's working:
+```bash
+curl -X POST http://localhost:18789/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_GATEWAY_TOKEN" \
+  -d '{"model":"default","messages":[{"role":"user","content":"hello"}]}'
+```
+
+Your gateway token is in `openclaw.json` at `gateway.auth.token`. Set it as `OPENCLAW_AUTH_TOKEN` in the adapter's `.env`.
 
 ## Setup
 
@@ -137,16 +155,25 @@ The response appears in the Jaibber chat as "OpenClaw".
 
 ## How It Works
 
+### @Mention Routing
+The adapter uses @mention routing to avoid the "everyone answers" problem in multi-agent projects:
+
+- `@OpenClaw what is 2+2?` → OpenClaw responds, other agents ignore
+- `@CodingAgent review this` → OpenClaw ignores, CodingAgent responds
+- `Hey everyone, status update?` (no @mention) → All agents may respond
+
+Set `JAIBBER_AGENT_NAME` to match how users will @mention your agent.
+
 ### Webhook Mode
 1. Jaibber server sends `message.created` webhook to `{ADAPTER_PUBLIC_URL}/hooks/jaibber`
 2. Adapter verifies HMAC signature (`X-Jaibber-Signature` header)
-3. Adapter filters: only processes messages from humans (`senderType: "user"`)
+3. Adapter filters: only processes messages from humans (`senderType: "user"`) addressed to this agent
 4. Forwards message text to OpenClaw via `POST /v1/chat/completions`
 5. Posts OpenClaw's response back to the Jaibber project channel
 
 ### Poll Mode
 1. Adapter polls `GET /api/projects/{id}/messages?after={cursor}` every N seconds
-2. New messages from humans are forwarded to OpenClaw
+2. New user messages addressed to this agent are forwarded to OpenClaw
 3. Responses posted back to Jaibber
 4. Cursor position saved to `.openclaw-agent.json` across restarts
 

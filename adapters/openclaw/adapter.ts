@@ -241,6 +241,28 @@ function isProjectAllowed(projectId: string): boolean {
     .includes(projectId);
 }
 
+// ── @Mention Routing ──────────────────────────────────────────────────
+
+/** Extract @mentions from message text (case-insensitive). */
+function parseMentions(text: string): string[] {
+  const matches = text.match(/@(\w[\w-]*)/g);
+  if (!matches) return [];
+  return matches.map((m) => m.slice(1).toLowerCase());
+}
+
+/**
+ * Check if this adapter should respond to the message.
+ * - If no @mentions in message → respond (general message)
+ * - If @mentions exist and one matches our agent name → respond
+ * - If @mentions exist but none match → skip (addressed to someone else)
+ */
+function shouldRespond(text: string): boolean {
+  const mentions = parseMentions(text);
+  if (mentions.length === 0) return true; // no mentions = general message
+  const myName = cfg.jaibberAgentName.toLowerCase();
+  return mentions.some((m) => m === myName || myName.includes(m) || m.includes(myName));
+}
+
 // Dedup: track recently processed message IDs
 const processed = new Set<string>();
 
@@ -259,6 +281,13 @@ async function handleMessage(msg: IncomingMessage): Promise<void> {
   // Skip out-of-scope projects
   if (!isProjectAllowed(msg.projectId)) {
     console.log(`[skip] Project ${msg.projectId} not in scope`);
+    return;
+  }
+
+  // @mention routing: only respond if addressed to us (or no mentions at all)
+  if (!shouldRespond(msg.text)) {
+    const mentions = parseMentions(msg.text);
+    console.log(`[skip] Message addressed to @${mentions.join(", @")} — not us`);
     return;
   }
 
