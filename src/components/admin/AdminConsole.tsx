@@ -50,10 +50,12 @@ function UsageBar({ label, value, max }: { label: string; value: number; max: nu
 }
 
 export function AdminConsole() {
-  const { activeOrgId, stats, agents, loadingStats, loadingAgents } = useOrgStore();
+  const { activeOrgId, orgs, stats, agents, loadingStats, loadingAgents } = useOrgStore();
   const [range, setRange] = useState("7d");
+  const [copiedId, setCopiedId] = useState(false);
   const { apiBaseUrl } = useSettingsStore((s) => s.settings);
   const token = useAuthStore((s) => s.token);
+  const activeOrg = orgs.find((o) => o.id === activeOrgId);
 
   useEffect(() => {
     if (!activeOrgId || !apiBaseUrl || !token) return;
@@ -68,7 +70,26 @@ export function AdminConsole() {
   return (
     <div className="p-6 space-y-6 overflow-y-auto max-h-full">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-foreground">Operations Console</h1>
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">Operations Console</h1>
+          {activeOrg && (
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xs text-muted-foreground">Org ID:</span>
+              <code className="text-xs text-muted-foreground font-mono bg-muted/30 px-1.5 py-0.5 rounded">{activeOrgId}</code>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(activeOrgId!);
+                  setCopiedId(true);
+                  setTimeout(() => setCopiedId(false), 2000);
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                title="Copy Org ID"
+              >
+                {copiedId ? "Copied!" : "Copy"}
+              </button>
+            </div>
+          )}
+        </div>
         <div className="flex gap-1 bg-muted/30 rounded-lg p-1">
           {(["1d", "7d", "30d"] as const).map((r) => (
             <button
