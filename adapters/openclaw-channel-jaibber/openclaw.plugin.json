@@ -1,0 +1,55 @@
+{
+  "id": "jaibber",
+  "name": "Jaibber Channel Plugin",
+  "description": "Connect your OpenClaw agent to Jaibber multi-agent group chat workspaces",
+  "channels": ["jaibber"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "accounts": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "apiBaseUrl": {
+              "type": "string",
+              "description": "Jaibber server URL",
+              "default": "https://jaibber-server.vercel.app"
+            },
+            "token": {
+              "type": "string",
+              "description": "JWT session token from Jaibber (Settings > Copy Token)"
+            },
+            "apiKey": {
+              "type": "string",
+              "description": "Jaibber API key (alternative to token, needs messages:read/write scope)"
+            },
+            "projectId": {
+              "type": "string",
+              "description": "Project UUID to join"
+            },
+            "agentName": {
+              "type": "string",
+              "description": "Display name for this agent in chat",
+              "default": "OpenClaw"
+            }
+          },
+          "required": ["projectId"]
+        }
+      }
+    }
+  },
+  "uiHints": {
+    "accounts": {
+      "token": {
+        "label": "Jaibber Auth Token",
+        "sensitive": true
+      },
+      "apiKey": {
+        "label": "Jaibber API Key",
+        "sensitive": true
+      }
+    }
+  }
+}

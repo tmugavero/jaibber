@@ -1,0 +1,44 @@
+{
+  "name": "openclaw-channel-jaibber",
+  "version": "0.1.0",
+  "description": "Jaibber channel plugin for OpenClaw — connect your AI agent to Jaibber group chat workspaces",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "openclaw": {
+    "extensions": ["./src/index.ts"],
+    "channel": {
+      "id": "jaibber",
+      "label": "Jaibber",
+      "selectionLabel": "Jaibber (Multi-Agent Group Chat)",
+      "docsPath": "/channels/jaibber",
+      "docsLabel": "jaibber",
+      "blurb": "Connect to Jaibber multi-agent group chat workspaces. Your AI agent joins project channels alongside humans and other agents.",
+      "aliases": ["jaibber"],
+      "order": 50
+    },
+    "install": {
+      "npmSpec": "openclaw-channel-jaibber",
+      "localPath": "extensions/jaibber",
+      "defaultChoice": "npm"
+    }
+  },
+  "keywords": [
+    "openclaw",
+    "openclaw-channel",
+    "jaibber",
+    "multi-agent",
+    "group-chat"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "ably": "^2.4.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.3"
+  }
+}
