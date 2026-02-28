@@ -21,6 +21,13 @@ export function LoginScreen({ onLogin }: Props) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [email, setEmail] = useState("");
+
+  // Forgot password
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotSending, setForgotSending] = useState(false);
 
   // GitHub token paste
   const [githubToken, setGithubToken] = useState("");
@@ -73,7 +80,7 @@ export function LoginScreen({ onLogin }: Props) {
       const res = await fetch(`${apiBaseUrl}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: username.trim(), password }),
+        body: JSON.stringify({ username: username.trim(), password, email: email.trim() || undefined }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Registration failed."); return; }
@@ -83,6 +90,29 @@ export function LoginScreen({ onLogin }: Props) {
       setError(`Network error: ${e}`);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!forgotEmail.trim()) {
+      setError("Email address is required.");
+      return;
+    }
+    setForgotSending(true);
+    setError(null);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? "Something went wrong."); return; }
+      setForgotSent(true);
+    } catch (e) {
+      setError(`Network error: ${e}`);
+    } finally {
+      setForgotSending(false);
     }
   };
 
@@ -155,69 +185,147 @@ export function LoginScreen({ onLogin }: Props) {
           </div>
 
           {tab === "credentials" ? (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                  Username
-                </label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder={mode === "register" ? "Choose a username" : "your-username"}
-                  autoComplete="username"
-                  className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
-                />
+            showForgot ? (
+              <div className="space-y-3">
+                {forgotSent ? (
+                  <>
+                    <p className="text-sm text-foreground font-medium">Check your email</p>
+                    <p className="text-xs text-muted-foreground">
+                      If an account with that email exists, we've sent a password reset link.
+                      The link expires in 1 hour.
+                    </p>
+                    <button
+                      onClick={() => { setShowForgot(false); setForgotSent(false); setForgotEmail(""); setError(null); }}
+                      className="w-full border border-border rounded-xl py-2.5 text-sm font-semibold hover:bg-muted/40 transition-colors"
+                    >
+                      Back to sign in
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      Enter the email address associated with your account and we'll send you a link to reset your password.
+                    </p>
+                    <div>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">Email</label>
+                      <input
+                        type="email"
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        autoComplete="email"
+                        onKeyDown={(e) => { if (e.key === "Enter") handleForgotPassword(); }}
+                        className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+                      />
+                    </div>
+                    <button
+                      onClick={handleForgotPassword}
+                      disabled={forgotSending}
+                      className="w-full bg-primary text-primary-foreground rounded-xl py-2.5 text-sm font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-wait"
+                    >
+                      {forgotSending ? "Sending..." : "Send Reset Link"}
+                    </button>
+                    <p className="text-xs text-center text-muted-foreground">
+                      <button
+                        onClick={() => { setShowForgot(false); setError(null); }}
+                        className="text-primary hover:underline"
+                      >
+                        Back to sign in
+                      </button>
+                    </p>
+                  </>
+                )}
               </div>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={mode === "register" ? "Choose a password" : "••••••••"}
-                  autoComplete={mode === "register" ? "new-password" : "current-password"}
-                  onKeyDown={(e) => { if (e.key === "Enter") mode === "register" ? handleRegister() : handleCredentialsLogin(); }}
-                  className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
-                />
-              </div>
-              {mode === "register" && (
+            ) : (
+              <div className="space-y-3">
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                    Confirm password
+                    Username
                   </label>
                   <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Re-enter your password"
-                    autoComplete="new-password"
-                    onKeyDown={(e) => { if (e.key === "Enter") handleRegister(); }}
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder={mode === "register" ? "Choose a username" : "your-username"}
+                    autoComplete="username"
                     className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
                   />
                 </div>
-              )}
-              <button
-                onClick={mode === "register" ? handleRegister : handleCredentialsLogin}
-                disabled={saving}
-                className="w-full bg-primary text-primary-foreground rounded-xl py-2.5 text-sm font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-wait"
-              >
-                {saving
-                  ? (mode === "register" ? "Creating account…" : "Signing in…")
-                  : (mode === "register" ? "Create account" : "Sign in")}
-              </button>
-              <p className="text-xs text-center text-muted-foreground">
-                {mode === "signin" ? "No account? " : "Already have an account? "}
+                {mode === "register" && (
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                      Email <span className="font-normal opacity-60">(for password recovery)</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                      className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={mode === "register" ? "Choose a password" : "••••••••"}
+                    autoComplete={mode === "register" ? "new-password" : "current-password"}
+                    onKeyDown={(e) => { if (e.key === "Enter") mode === "register" ? handleRegister() : handleCredentialsLogin(); }}
+                    className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+                  />
+                </div>
+                {mode === "register" && (
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                      Confirm password
+                    </label>
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter your password"
+                      autoComplete="new-password"
+                      onKeyDown={(e) => { if (e.key === "Enter") handleRegister(); }}
+                      className="w-full bg-muted/40 border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+                    />
+                  </div>
+                )}
                 <button
-                  onClick={() => { setMode(mode === "signin" ? "register" : "signin"); setConfirmPassword(""); setError(null); }}
-                  className="text-primary hover:underline"
+                  onClick={mode === "register" ? handleRegister : handleCredentialsLogin}
+                  disabled={saving}
+                  className="w-full bg-primary text-primary-foreground rounded-xl py-2.5 text-sm font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-wait"
                 >
-                  {mode === "signin" ? "Register" : "Sign in"}
+                  {saving
+                    ? (mode === "register" ? "Creating account..." : "Signing in...")
+                    : (mode === "register" ? "Create account" : "Sign in")}
                 </button>
-              </p>
-            </div>
+                <p className="text-xs text-center text-muted-foreground">
+                  {mode === "signin" ? "No account? " : "Already have an account? "}
+                  <button
+                    onClick={() => { setMode(mode === "signin" ? "register" : "signin"); setConfirmPassword(""); setEmail(""); setError(null); }}
+                    className="text-primary hover:underline"
+                  >
+                    {mode === "signin" ? "Register" : "Sign in"}
+                  </button>
+                </p>
+                {mode === "signin" && (
+                  <p className="text-xs text-center text-muted-foreground">
+                    <button
+                      onClick={() => { setShowForgot(true); setError(null); }}
+                      className="text-primary hover:underline"
+                    >
+                      Forgot your password?
+                    </button>
+                  </p>
+                )}
+              </div>
+            )
           ) : (
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">

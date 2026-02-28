@@ -15,6 +15,12 @@ export function BillingPage() {
   const [error, setError] = useState<string | null>(null);
   const [plans, setPlans] = useState<Plan[]>(FALLBACK_PLANS);
   const [seatCounts, setSeatCounts] = useState<Record<string, number>>({});
+  const [invoices, setInvoices] = useState<Array<{
+    id: string; number: string | null; date: number;
+    amount: number; currency: string; status: string;
+    pdfUrl: string | null; hostedUrl: string | null;
+  }>>([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
 
   // Fetch live plans from Stripe
   useEffect(() => {
@@ -23,6 +29,20 @@ export function BillingPage() {
       .then(setPlans)
       .catch(() => {}); // Keep fallback on error
   }, [apiBaseUrl]);
+
+  // Fetch invoice history
+  useEffect(() => {
+    if (!activeOrg || !apiBaseUrl || !token) return;
+    if ((activeOrg.plan || "free") === "free") return;
+    setInvoicesLoading(true);
+    fetch(`${apiBaseUrl}/api/billing/invoices?orgId=${activeOrg.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => setInvoices(data.invoices ?? []))
+      .catch(() => {})
+      .finally(() => setInvoicesLoading(false));
+  }, [activeOrg?.id, activeOrg?.plan, apiBaseUrl, token]);
 
   const handleUpgrade = async (plan: Plan) => {
     if (!activeOrg || !apiBaseUrl || !token) return;
@@ -172,6 +192,53 @@ export function BillingPage() {
           );
         })}
       </div>
+
+      {/* Invoice History */}
+      {currentPlan !== "free" && (
+        <div className="bg-card border border-border rounded-xl p-5">
+          <h2 className="text-base font-semibold text-foreground mb-4">Invoice History</h2>
+          {invoicesLoading ? (
+            <p className="text-xs text-muted-foreground animate-pulse">Loading invoices...</p>
+          ) : invoices.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No invoices yet.</p>
+          ) : (
+            <div className="space-y-0.5">
+              {invoices.map((inv) => (
+                <div key={inv.id} className="flex items-center justify-between py-2.5 border-b border-border last:border-0">
+                  <div>
+                    <div className="text-sm text-foreground">
+                      {new Date(inv.date * 1000).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {inv.number ?? inv.id.slice(0, 20)}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium text-foreground">
+                      {inv.currency === "usd" ? "$" : `${inv.currency.toUpperCase()} `}
+                      {(inv.amount / 100).toFixed(2)}
+                    </span>
+                    <span className={cn(
+                      "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                      inv.status === "paid"
+                        ? "bg-emerald-500/10 text-emerald-500"
+                        : "bg-yellow-500/10 text-yellow-500"
+                    )}>
+                      {inv.status}
+                    </span>
+                    {inv.pdfUrl && (
+                      <a href={inv.pdfUrl} target="_blank" rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline">
+                        PDF
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
