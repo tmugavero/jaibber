@@ -20,7 +20,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: https:; connect-src 'self' https://*.ably.io https://*.jaibber.com wss://*.ably.io; font-src 'self'"
     },
     "trayIcon": {
       "id": "main",

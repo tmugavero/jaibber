@@ -3,5 +3,5 @@ export interface AppSettings {
   openaiApiKey: string | null;     // fallback API key for Codex CLI
   googleApiKey: string | null;     // fallback API key for Gemini CLI
   machineName: string;             // cosmetic label for this device
-  apiBaseUrl: string;              // "https://jaibber-server.vercel.app"
+  apiBaseUrl: string;              // "https://api.jaibber.com"
 }

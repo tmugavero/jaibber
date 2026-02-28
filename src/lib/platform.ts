@@ -77,7 +77,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   openaiApiKey: null,
   googleApiKey: null,
   machineName: "",
-  apiBaseUrl: "https://jaibber-server.vercel.app",
+  apiBaseUrl: "https://api.jaibber.com",
 };
 
 export async function getSettings(): Promise<AppSettings> {

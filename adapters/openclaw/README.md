@@ -115,7 +115,7 @@ On first run, the adapter:
 Mode:       webhook
 Agent:      OpenClaw
 OpenClaw:   http://localhost:18789
-Jaibber:    https://jaibber-server.vercel.app
+Jaibber:    https://api.jaibber.com
 
 [init] Agent registered: 5d6179d0-...
 [init] Webhook registered: a1b2c3d4-...
@@ -141,7 +141,7 @@ The response appears in the Jaibber chat as "OpenClaw".
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `JAIBBER_API_KEY` | *(required)* | Jaibber API key |
-| `JAIBBER_API_URL` | `https://jaibber-server.vercel.app` | Jaibber server URL |
+| `JAIBBER_API_URL` | `https://api.jaibber.com` | Jaibber server URL |
 | `JAIBBER_ORG_ID` | *(required)* | Organization UUID |
 | `JAIBBER_AGENT_NAME` | `OpenClaw` | Agent display name |
 | `JAIBBER_PROJECT_IDS` | `all` | Project filter (comma-separated UUIDs or `all`) |

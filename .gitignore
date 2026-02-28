@@ -17,10 +17,15 @@ node_modules/
 !src-tauri/tauri.conf.json
 !src-tauri/capabilities/*.json
 !src-tauri/gen/schemas/*.json
+!public/manifest.json
+!components.json
+!docs/**/*.json
+!.env.example
 
 # Env
 .env
-.env.*
+.env.local
+.env.*.local
 
 # OS
 .DS_Store

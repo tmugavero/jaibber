@@ -23,9 +23,9 @@ const PROVIDER_OPTIONS = [
   { value: "custom", label: "Custom" },
 ] as const;
 
-/** Strip spaces from agent names so @mentions work (e.g. "Coding Agent" → "CodingAgent") */
+/** Strip disallowed chars from agent names so @mentions work (e.g. "Coding Agent!" → "CodingAgent") */
 function sanitizeAgentName(name: string): string {
-  return name.replace(/\s+/g, "");
+  return name.replace(/[^a-zA-Z0-9_-]/g, "");
 }
 
 const PROVIDER_LABELS: Record<string, string> = {

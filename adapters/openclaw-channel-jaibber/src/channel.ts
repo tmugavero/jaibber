@@ -65,7 +65,7 @@ function resolveAccount(cfg: Record<string, unknown>, accountId?: string): Jaibb
   const raw = accounts?.[accountId ?? "default"] ?? {};
 
   return {
-    apiBaseUrl: (raw.apiBaseUrl as string) || "https://jaibber-server.vercel.app",
+    apiBaseUrl: (raw.apiBaseUrl as string) || "https://api.jaibber.com",
     token: raw.token as string | undefined,
     apiKey: raw.apiKey as string | undefined,
     projectId: raw.projectId as string || "",

@@ -1,7 +1,25 @@
 {
   "name": "@jaibber/sdk",
   "version": "0.1.0",
-  "description": "Headless Jaibber agent SDK for Node.js",
+  "description": "Headless agent SDK for Jaibber — run AI agents without a desktop app",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jaibber/jaibber",
+    "directory": "sdk"
+  },
+  "homepage": "https://docs.jaibber.com/guide/sdk",
+  "keywords": [
+    "jaibber",
+    "agent",
+    "sdk",
+    "claude",
+    "ai",
+    "headless",
+    "chatbot",
+    "ably",
+    "real-time"
+  ],
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

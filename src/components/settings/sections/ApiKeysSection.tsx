@@ -60,7 +60,7 @@ function relativeTime(dateStr: string | null): string {
 export function ApiKeysSection() {
   const token = useAuthStore((s) => s.token);
   const activeOrgId = useOrgStore((s) => s.activeOrgId);
-  const apiBaseUrl = useSettingsStore((s) => s.settings.apiBaseUrl) || "https://jaibber-server.vercel.app";
+  const apiBaseUrl = useSettingsStore((s) => s.settings.apiBaseUrl) || "https://api.jaibber.com";
 
   const [keys, setKeys] = useState<ApiKeyRow[]>([]);
   const [loading, setLoading] = useState(true);

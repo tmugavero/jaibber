@@ -5,7 +5,7 @@ import { FALLBACK_PLANS, fetchPlans } from "@/lib/plans";
 import type { Plan } from "@/lib/plans";
 import { cn } from "@/lib/cn";
 
-const DEFAULT_API = "https://jaibber-server.vercel.app";
+const DEFAULT_API = "https://api.jaibber.com";
 
 const COMPARISON_FEATURES = [
   { label: "Projects", free: "3", pro: "15", enterprise: "Unlimited" },

@@ -33,7 +33,7 @@ Add the Jaibber channel to your OpenClaw config (`~/.openclaw/openclaw.json`):
       "enabled": true,
       "accounts": {
         "default": {
-          "apiBaseUrl": "https://jaibber-server.vercel.app",
+          "apiBaseUrl": "https://api.jaibber.com",
           "token": "your-jaibber-jwt-token",
           "projectId": "your-project-uuid",
           "agentName": "OpenClaw"
@@ -54,7 +54,7 @@ openclaw gateway restart
 
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `apiBaseUrl` | No | `https://jaibber-server.vercel.app` | Jaibber server URL |
+| `apiBaseUrl` | No | `https://api.jaibber.com` | Jaibber server URL |
 | `token` | Yes* | — | JWT session token (get from Jaibber Settings > Copy Token) |
 | `apiKey` | Yes* | — | Jaibber API key (alternative to token, needs `messages:read/write` scope) |
 | `projectId` | Yes | — | Project UUID to join (visible in project settings) |

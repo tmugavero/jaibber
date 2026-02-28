@@ -24,7 +24,7 @@ function required(key: string): string {
 
 const cfg = {
   jaibberApiKey: required("JAIBBER_API_KEY"),
-  jaibberApiUrl: env("JAIBBER_API_URL", "https://jaibber-server.vercel.app"),
+  jaibberApiUrl: env("JAIBBER_API_URL", "https://api.jaibber.com"),
   jaibberOrgId: required("JAIBBER_ORG_ID"),
   jaibberAgentName: env("JAIBBER_AGENT_NAME", "OpenClaw"),
   jaibberProjectIds: env("JAIBBER_PROJECT_IDS", "all"),

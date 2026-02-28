@@ -59,7 +59,7 @@ REQUIRED:
   --agent-name <name>       Agent display name (used for @mention routing)
 
 OPTIONAL:
-  --server <url>            Server URL (default: https://jaibber-server.vercel.app)
+  --server <url>            Server URL (default: https://api.jaibber.com)
   --anthropic-key <key>     Anthropic API key for Claude responses
   --instructions <text>     System prompt for the agent
   --machine-name <name>     Machine identifier shown in presence
@@ -118,7 +118,7 @@ npm install @jaibber/sdk
 import { JaibberAgent } from '@jaibber/sdk';
 
 const agent = new JaibberAgent({
-  serverUrl: 'https://jaibber-server.vercel.app',
+  serverUrl: 'https://api.jaibber.com',
   credentials: { username: 'my-bot', password: 's3cret' },
   agentName: 'CodingAgent',
   agentInstructions: 'You are a helpful coding assistant.',

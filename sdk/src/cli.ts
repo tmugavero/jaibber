@@ -47,7 +47,7 @@ REQUIRED:
   --agent-name <name>       Agent display name (used for @mention routing)
 
 OPTIONAL:
-  --server <url>            Server URL (default: https://jaibber-server.vercel.app)
+  --server <url>            Server URL (default: https://api.jaibber.com)
   --anthropic-key <key>     Anthropic API key — enables built-in Claude provider
   --instructions <text>     System prompt for the agent
   --machine-name <name>     Machine identifier shown in presence
@@ -82,7 +82,7 @@ const username = args["username"];
 const password = args["password"] || process.env.JAIBBER_PASSWORD;
 const agentName = args["agent-name"];
 const serverUrl =
-  args["server"] || "https://jaibber-server.vercel.app";
+  args["server"] || "https://api.jaibber.com";
 const anthropicKey =
   args["anthropic-key"] || process.env.ANTHROPIC_API_KEY;
 const instructions = args["instructions"];

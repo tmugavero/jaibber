@@ -6,7 +6,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   openaiApiKey: null,
   googleApiKey: null,
   machineName: "",
-  apiBaseUrl: "https://jaibber-server.vercel.app",
+  apiBaseUrl: "https://api.jaibber.com",
 };
 
 interface SettingsStore {

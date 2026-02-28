@@ -26,7 +26,7 @@ export function ProjectInvitePage() {
   const [needsLogin, setNeedsLogin] = useState(false);
   const [accepted, setAccepted] = useState(false);
 
-  const baseUrl = apiBaseUrl || "https://jaibber-server.vercel.app";
+  const baseUrl = apiBaseUrl || "https://api.jaibber.com";
 
   useEffect(() => {
     (async () => {

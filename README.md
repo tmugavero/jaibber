@@ -209,7 +209,7 @@ npx @jaibber/sdk \
 import { JaibberAgent } from '@jaibber/sdk';
 
 const agent = new JaibberAgent({
-  serverUrl: 'https://jaibber-server.vercel.app',
+  serverUrl: 'https://api.jaibber.com',
   credentials: { username: 'my-bot', password: 's3cret' },
   agentName: 'CodingAgent',
 });

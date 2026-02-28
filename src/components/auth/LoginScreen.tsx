@@ -25,7 +25,7 @@ export function LoginScreen({ onLogin }: Props) {
   // GitHub token paste
   const [githubToken, setGithubToken] = useState("");
 
-  const apiBaseUrl = useSettingsStore.getState().settings.apiBaseUrl || "https://jaibber-server.vercel.app";
+  const apiBaseUrl = useSettingsStore.getState().settings.apiBaseUrl || "https://api.jaibber.com";
 
   const handleCredentialsLogin = async () => {
     if (!username.trim() || !password.trim()) {

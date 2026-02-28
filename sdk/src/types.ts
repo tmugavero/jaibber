@@ -109,7 +109,7 @@ export interface TaskEvent {
 // ── Agent config ────────────────────────────────────────────────────
 
 export interface AgentConfig {
-  /** Jaibber server URL (e.g. "https://jaibber-server.vercel.app") */
+  /** Jaibber server URL (e.g. "https://api.jaibber.com") */
   serverUrl: string;
   /** Login credentials for the agent's Jaibber account */
   credentials: { username: string; password: string };
