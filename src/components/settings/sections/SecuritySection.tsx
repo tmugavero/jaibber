@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -6,12 +6,56 @@ export function SecuritySection() {
   const token = useAuthStore((s) => s.token);
   const { apiBaseUrl } = useSettingsStore((s) => s.settings);
 
+  // Email
+  const [email, setEmail] = useState("");
+  const [emailLoading, setEmailLoading] = useState(true);
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [emailSuccess, setEmailSuccess] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+
+  // Password
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [changingPw, setChangingPw] = useState(false);
   const [pwSuccess, setPwSuccess] = useState(false);
   const [pwError, setPwError] = useState<string | null>(null);
+
+  // Load current email on mount
+  useEffect(() => {
+    if (!apiBaseUrl || !token) return;
+    fetch(`${apiBaseUrl}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => { if (data.email) setEmail(data.email); })
+      .catch(() => {})
+      .finally(() => setEmailLoading(false));
+  }, [apiBaseUrl, token]);
+
+  const handleUpdateEmail = async () => {
+    if (!email.trim()) { setEmailError("Email is required."); return; }
+    if (!apiBaseUrl || !token) { setEmailError("Not authenticated."); return; }
+    setEmailSaving(true);
+    setEmailError(null);
+    setEmailSuccess(false);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/auth/update-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setEmailError(data.error ?? "Failed to update email."); return; }
+      setEmail(data.email);
+      setEmailSuccess(true);
+      setTimeout(() => setEmailSuccess(false), 3000);
+    } catch (e) {
+      setEmailError(`Network error: ${e}`);
+    } finally {
+      setEmailSaving(false);
+    }
+  };
 
   const handleChangePassword = async () => {
     if (!newPw || !currentPw) { setPwError("Both fields are required."); return; }
@@ -45,6 +89,38 @@ export function SecuritySection() {
 
   return (
     <div className="space-y-8">
+      <div>
+        <h2 className="text-lg font-semibold text-foreground mb-1">Email</h2>
+        <p className="text-sm text-muted-foreground mb-4">Used for password recovery and notifications.</p>
+        <div className="space-y-4 max-w-sm">
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+              Email address
+            </label>
+            <input
+              type="email"
+              value={emailLoading ? "" : email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder={emailLoading ? "Loading..." : "you@example.com"}
+              disabled={emailLoading}
+              autoComplete="email"
+              onKeyDown={(e) => { if (e.key === "Enter") handleUpdateEmail(); }}
+              className={inputClass}
+            />
+          </div>
+          <button
+            onClick={handleUpdateEmail}
+            disabled={emailSaving || emailLoading}
+            className="border border-border rounded-lg px-4 py-2 text-sm font-medium hover:bg-muted/40 transition-all disabled:opacity-50"
+          >
+            {emailSuccess ? "Email Updated!" : emailSaving ? "Saving..." : "Update Email"}
+          </button>
+          {emailError && (
+            <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">{emailError}</p>
+          )}
+        </div>
+      </div>
+
       <div>
         <h2 className="text-lg font-semibold text-foreground mb-1">Password</h2>
         <p className="text-sm text-muted-foreground mb-4">Change your account password.</p>
