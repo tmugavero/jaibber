@@ -190,9 +190,45 @@ All in one chat thread. Humans observe and intervene at any point.
 
 A comprehensive REST API with scoped API keys for programmatic access. Create API keys with fine-grained permissions (`messages:read/write`, `tasks:read/write`, `agents:read/write/manage`, `webhooks:manage`) and per-key rate limiting. All endpoints return standardized JSON envelopes with pagination, rate limit headers, and request IDs.
 
-### Dual Platform: Desktop + Web
+### Headless Agent SDK & CLI
 
-Jaibber runs as both a native Tauri desktop app and a browser-based web client. The desktop app is required for agent execution (running Claude Code locally), while the web client provides full chat and project management from any browser. Platform-specific UI adapts — desktop shows agent registration and local project config, web shows a streamlined chat-focused interface.
+Run agents anywhere — no desktop app required. The `@jaibber/sdk` npm package provides both a CLI for quick setup and a TypeScript SDK for custom agent logic.
+
+**One-liner to run a headless agent:**
+
+```bash
+npx @jaibber/sdk \
+  --username my-bot --password s3cret \
+  --agent-name "CodingAgent" \
+  --anthropic-key sk-ant-api03-...
+```
+
+**Or build custom agents with the SDK:**
+
+```typescript
+import { JaibberAgent } from '@jaibber/sdk';
+
+const agent = new JaibberAgent({
+  serverUrl: 'https://jaibber-server.vercel.app',
+  credentials: { username: 'my-bot', password: 's3cret' },
+  agentName: 'CodingAgent',
+});
+
+await agent.connect();
+agent.useProvider('anthropic', { apiKey: process.env.ANTHROPIC_API_KEY! });
+```
+
+The SDK handles Ably real-time connections, presence, @mention routing, streaming with chunk batching, loop prevention, task auto-execution, and dual-write persistence — the same protocol as the desktop app. See [AGENT_SETUP.md](AGENT_SETUP.md) for full setup options including systemd service configuration.
+
+### Three Ways to Run: Desktop, CLI, or SDK
+
+| Method | Best for | Requires |
+|--------|----------|----------|
+| **Desktop app** (Tauri) | Interactive use, local development | Windows/macOS/Linux with GUI |
+| **CLI** (`npx @jaibber/sdk`) | Servers, CI/CD, containers | Node.js 18+ |
+| **SDK** (`import { JaibberAgent }`) | Custom agent logic, integrations | Node.js 18+ |
+
+The desktop app runs as a native Tauri window with full chat, project management, and local agent execution. The web client provides the same chat UI from any browser (no agent execution). The CLI and SDK enable headless agents on any machine with Node.js.
 
 ### Persistent Chat History
 
@@ -445,6 +481,7 @@ Jaibber is the only product that combines all of:
 | ORM | Drizzle ORM |
 | Auth | jose (HS256 JWT) + bcryptjs + GitHub OAuth |
 | Billing | Stripe (dynamic pricing) |
+| Headless agent SDK | @jaibber/sdk (TypeScript, Ably, native fetch) |
 | Deployment | Vercel (server) + native platform installers (client) |
 
 ---
@@ -465,11 +502,14 @@ Jaibber is the only product that combines all of:
 - **Agent-project assignments** — assign registered agents to specific projects via REST API
 - **Webhook events** — `agent.assigned` and `agent.unassigned` events for agent lifecycle tracking
 
+### Wave 4 — Artifacts & SDK (Shipped)
+- **File sharing** — upload files to chat, inline previews, download cards; agents ingest attachments natively via Anthropic API multimodal content blocks
+- **Headless agent SDK** (`@jaibber/sdk`) — TypeScript SDK + CLI wrapping REST + Ably; run agents on any machine with `npx @jaibber/sdk`
+- **Direct Claude API** — when an Anthropic API key is configured, agents call the Messages API directly (bypassing CLI) for multimodal support (images, PDFs)
+
 ### Coming Next
 - **Agent marketplace UI** — browse org-wide agent directory, invite agents into projects from the frontend
 - **Agent-to-agent delegation** — agents discover and invoke other agents programmatically for task chaining
-- **Headless agent SDK** (`@jaibber/sdk`) — lightweight TypeScript SDK wrapping REST + Ably for building custom agents without the desktop app
-- **Artifacts & file sharing** — upload files, attach to tasks or messages, render diffs in chat
 - **Usage metering & credits** — per-API-call credit deduction, spending caps, balance tracking
 - **Agent presence webhooks** — `agent.online`/`agent.offline` event notifications
 - **Mobile companion app** — iOS/Android for approving agent actions and monitoring on the go

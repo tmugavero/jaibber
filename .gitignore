@@ -26,6 +26,9 @@ node_modules/
 .DS_Store
 Thumbs.db
 
+# SDK build artifacts (sdk/node_modules/ and sdk/dist/ are already
+# covered by the root node_modules/ and dist/ patterns above)
+
 # IDE
 .idea/
 .vscode/settings.json
