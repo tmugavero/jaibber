@@ -8,17 +8,17 @@ import { cn } from "@/lib/cn";
 const DEFAULT_API = "https://api.jaibber.com";
 
 const COMPARISON_FEATURES = [
-  { label: "Projects", free: "3", pro: "15", enterprise: "Unlimited" },
-  { label: "Agent connections", free: "2", pro: "10", enterprise: "Unlimited" },
-  { label: "Team members", free: "3", pro: "10", enterprise: "Unlimited" },
-  { label: "Message history", free: "7 days", pro: "90 days", enterprise: "Unlimited" },
-  { label: "Real-time streaming", free: "Yes", pro: "Yes", enterprise: "Yes" },
-  { label: "Multi-machine agents", free: "Yes", pro: "Yes", enterprise: "Yes" },
-  { label: "Admin console", free: "—", pro: "Yes", enterprise: "Yes" },
-  { label: "Usage analytics", free: "—", pro: "Yes", enterprise: "Yes" },
-  { label: "Audit logs", free: "—", pro: "—", enterprise: "Coming soon" },
-  { label: "SSO", free: "—", pro: "—", enterprise: "Coming soon" },
-  { label: "API access", free: "—", pro: "—", enterprise: "Yes" },
+  { label: "Projects", free: "2", pro: "10", team: "Unlimited" },
+  { label: "Agent connections", free: "1", pro: "5", team: "25/seat" },
+  { label: "Team members", free: "3", pro: "10", team: "Unlimited" },
+  { label: "Messages/day", free: "100", pro: "1,000", team: "5,000/seat" },
+  { label: "File storage", free: "100 MB", pro: "1 GB", team: "5 GB/seat" },
+  { label: "Message history", free: "7 days", pro: "90 days", team: "Unlimited" },
+  { label: "Real-time streaming", free: "Yes", pro: "Yes", team: "Yes" },
+  { label: "Multi-machine agents", free: "Yes", pro: "Yes", team: "Yes" },
+  { label: "Webhooks", free: "—", pro: "10", team: "100" },
+  { label: "API keys", free: "—", pro: "2", team: "Unlimited" },
+  { label: "Audit logs", free: "—", pro: "—", team: "Yes" },
 ];
 
 export function PricingPage() {
@@ -96,7 +96,7 @@ export function PricingPage() {
               <div className="p-4 text-muted-foreground">Feature</div>
               <div className="p-4 text-center text-foreground">Free</div>
               <div className="p-4 text-center text-primary">Pro</div>
-              <div className="p-4 text-center text-foreground">Enterprise</div>
+              <div className="p-4 text-center text-foreground">Team</div>
             </div>
             {COMPARISON_FEATURES.map((row, i) => (
               <div
@@ -109,7 +109,7 @@ export function PricingPage() {
                 <div className="p-4 text-muted-foreground">{row.label}</div>
                 <div className="p-4 text-center text-foreground">{row.free}</div>
                 <div className="p-4 text-center text-foreground">{row.pro}</div>
-                <div className="p-4 text-center text-foreground">{row.enterprise}</div>
+                <div className="p-4 text-center text-foreground">{row.team}</div>
               </div>
             ))}
           </div>

@@ -2,11 +2,17 @@ export interface Org {
   id: string;
   name: string;
   slug: string;
-  plan: "free" | "pro" | "enterprise";
+  plan: "free" | "pro" | "team";
   role: "owner" | "admin" | "member";
   maxProjects: number;
   maxMembers: number;
   maxAgents: number;
+  maxMessagesPerDay: number;
+  maxStorageBytes: number;
+  maxApiKeys: number;
+  maxWebhooks: number;
+  messageRetentionDays: number;
+  stripeQuantity: number;
   createdAt: string;
 }
 
