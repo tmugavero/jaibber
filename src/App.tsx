@@ -25,6 +25,12 @@ interface AppProps {
 function App({ onRequireLogin }: AppProps = {}) {
   const [bootState, setBootState] = useState<BootState>("loading");
 
+  // Lock body scroll for the full-screen app experience (Tauri always, web /app route)
+  useEffect(() => {
+    document.body.classList.add("app-lock");
+    return () => document.body.classList.remove("app-lock");
+  }, []);
+
   // Auto-save local projects to disk whenever the list changes
   useEffect(() => {
     return useProjectStore.subscribe(async (state) => {

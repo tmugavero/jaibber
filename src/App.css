@@ -53,6 +53,9 @@
     font-size: 110%;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+  /* Lock viewport for the app shell (chat UI) — keeps mobile-app feel without blocking marketing page scroll */
+  body.app-lock {
     overflow: hidden;
     overscroll-behavior: none;
     -webkit-overflow-scrolling: touch;
