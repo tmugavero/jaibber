@@ -63,7 +63,9 @@ export const useOrgStore = create<OrgStore>((set) => ({
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`Failed to load agents: ${res.status}`);
-      const { agents } = await res.json();
+      const json = await res.json();
+      // Server returns { data: { registered, live }, meta } via api.success()
+      const agents = json.data?.live ?? json.live ?? json.agents ?? [];
       set({ agents });
     } finally {
       set({ loadingAgents: false });
