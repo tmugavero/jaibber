@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ContactList } from "@/components/contacts/ContactList";
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import { SettingsPane } from "@/components/settings/SettingsPane";
@@ -8,6 +8,17 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
 
 type AppView = "main" | "settings";
+
+/** Parse window.location.hash into view + optional params */
+function parseHash(): { view: AppView; contactId: string | null } {
+  const hash = window.location.hash.replace(/^#/, "");
+  if (hash === "settings") return { view: "settings", contactId: null };
+  if (hash.startsWith("chat/")) {
+    const id = hash.slice(5);
+    return { view: "main", contactId: id || null };
+  }
+  return { view: "main", contactId: null };
+}
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -20,10 +31,37 @@ function useIsMobile() {
 }
 
 export function AppShell() {
-  const [activeContactId, setActiveContactId] = useState<string | null>(null);
-  const [view, setView] = useState<AppView>("main");
+  const initial = parseHash();
+  const [activeContactId, setActiveContactId] = useState<string | null>(initial.contactId);
+  const [view, setView] = useState<AppView>(initial.view);
   const [showSidebar, setShowSidebar] = useState(true);
   const isMobile = useIsMobile();
+
+  // Sync hash → state on browser back/forward
+  useEffect(() => {
+    const onHashChange = () => {
+      const parsed = parseHash();
+      setView(parsed.view);
+      if (parsed.contactId) {
+        setActiveContactId(parsed.contactId);
+        if (isMobile) setShowSidebar(false);
+      }
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [isMobile]);
+
+  // Update hash when view or contact changes (without triggering hashchange loop)
+  const navigate = useCallback((newView: AppView, contactId?: string | null) => {
+    setView(newView);
+    if (newView === "settings") {
+      window.history.pushState(null, "", "#settings");
+    } else if (contactId) {
+      window.history.pushState(null, "", `#chat/${contactId}`);
+    } else {
+      window.history.pushState(null, "", window.location.pathname);
+    }
+  }, []);
 
   // Initialize Ably connection + presence + project channel listeners
   useAbly();
@@ -40,12 +78,13 @@ export function AppShell() {
   // On mobile, selecting a contact hides the sidebar
   const handleSelectContact = (id: string) => {
     setActiveContactId(id);
+    navigate("main", id);
     if (isMobile) setShowSidebar(false);
   };
 
   // Settings view takes over the entire screen
   if (view === "settings") {
-    return <SettingsPane onClose={() => setView("main")} />;
+    return <SettingsPane onClose={() => navigate("main", activeContactId)} />;
   }
 
   // Mobile: show either sidebar or content, not both
@@ -56,7 +95,7 @@ export function AppShell() {
           <ContactList
             activeId={activeContactId}
             onSelect={handleSelectContact}
-            onOpenSettings={() => setView("settings")}
+            onOpenSettings={() => navigate("settings")}
           />
         ) : (
           <div className="flex-1 flex flex-col overflow-hidden">
@@ -81,7 +120,7 @@ export function AppShell() {
         <ContactList
           activeId={activeContactId}
           onSelect={handleSelectContact}
-          onOpenSettings={() => setView("settings")}
+          onOpenSettings={() => navigate("settings")}
         />
       </div>
       <div className="flex-1 flex flex-col overflow-hidden">

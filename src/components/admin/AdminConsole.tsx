@@ -140,7 +140,7 @@ export function AdminConsole() {
             </div>
 
             {/* Per-project breakdown */}
-            {stats.byProject.length > 0 && (
+            {stats.byProject?.length > 0 && (
               <div className="bg-card border border-border rounded-xl p-4 space-y-3">
                 <h3 className="text-xs font-medium text-muted-foreground">By Project</h3>
                 {stats.byProject.map((p) => {
@@ -158,12 +158,12 @@ export function AdminConsole() {
             )}
 
             {/* Per-day chart (simple text-based) */}
-            {stats.byDay.length > 0 && (
+            {stats.byDay?.length > 0 && (
               <div className="bg-card border border-border rounded-xl p-4 mt-3">
                 <h3 className="text-xs font-medium text-muted-foreground mb-3">Daily Activity</h3>
                 <div className="flex items-end gap-1 h-24">
                   {stats.byDay.map((day) => {
-                    const maxDay = Math.max(...stats.byDay.map((d) => d.prompts + d.responses), 1);
+                    const maxDay = Math.max(...(stats.byDay ?? []).map((d) => d.prompts + d.responses), 1);
                     const total = day.prompts + day.responses;
                     const pct = (total / maxDay) * 100;
                     return (
