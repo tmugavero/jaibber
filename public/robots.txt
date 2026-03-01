@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+
+Disallow: /app
+Disallow: /login
+Disallow: /invite/
+Disallow: /join/
+Disallow: /reset-password
+
+Sitemap: https://jaibber.com/sitemap.xml

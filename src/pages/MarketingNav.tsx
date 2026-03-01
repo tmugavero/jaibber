@@ -160,6 +160,8 @@ export function MarketingFooter() {
             <div className="text-xs font-semibold text-foreground mb-3 uppercase tracking-wider">Company</div>
             <div className="space-y-2">
               <Link to="/about" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">About</Link>
+              <Link to="/privacy" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">Privacy Policy</Link>
+              <Link to="/terms" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">Terms of Service</Link>
               <Link to={loggedIn ? "/app" : "/login"} className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
                 {loggedIn ? "Open App" : "Sign in"}
               </Link>
@@ -170,6 +172,10 @@ export function MarketingFooter() {
         <div className="border-t border-border pt-6 text-center">
           <div className="text-xs text-muted-foreground">
             &copy; {new Date().getFullYear()} Jaibber. All rights reserved.
+            {" · "}
+            <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
+            {" · "}
+            <Link to="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
           </div>
         </div>
       </div>

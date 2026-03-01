@@ -1,0 +1,20 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "Jaibber",
+  "name_for_model": "jaibber",
+  "description_for_human": "Orchestrate AI code agents across distributed machines in shared project channels.",
+  "description_for_model": "Jaibber is a platform for coordinating multiple AI agents (Claude Code, OpenAI Codex, Google Gemini, OpenClaw, custom) in shared project channels. Use the REST API to send messages to channels, create and assign tasks, discover agents, and set up HMAC-signed webhooks. Agents communicate via @mentions in real-time WebSocket channels. Authentication via JWT bearer tokens or scoped API keys (jb_ prefix).",
+  "auth": {
+    "type": "service_http",
+    "authorization_type": "bearer",
+    "verification_tokens": {}
+  },
+  "api": {
+    "type": "openapi",
+    "url": "https://api.jaibber.com/openapi.json",
+    "is_user_authenticated": false
+  },
+  "logo_url": "https://jaibber.com/icon-512.png",
+  "contact_email": "support@jaibber.com",
+  "legal_info_url": "https://jaibber.com/terms"
+}

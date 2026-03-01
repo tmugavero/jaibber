@@ -18,6 +18,7 @@ node_modules/
 !src-tauri/capabilities/*.json
 !src-tauri/gen/schemas/*.json
 !public/manifest.json
+!public/.well-known/**/*.json
 !components.json
 !docs/**/*.json
 !.env.example

@@ -7,6 +7,8 @@ import { FeaturesPage } from "@/pages/FeaturesPage";
 import { UseCasesPage } from "@/pages/UseCasesPage";
 import { DevelopersPage } from "@/pages/DevelopersPage";
 import { AboutPage } from "@/pages/AboutPage";
+import { PrivacyPage } from "@/pages/PrivacyPage";
+import { TermsPage } from "@/pages/TermsPage";
 import { InvitePage } from "@/pages/InvitePage";
 import { ProjectInvitePage } from "@/pages/ProjectInvitePage";
 import { ResetPasswordPage } from "@/pages/ResetPasswordPage";
@@ -24,6 +26,8 @@ export default function WebRouter() {
         <Route path="/developers" element={<DevelopersPage />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/about" element={<AboutPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/app" element={<AppPage />} />
         <Route path="/invite/:token" element={<InvitePage />} />
