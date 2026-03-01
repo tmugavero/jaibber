@@ -24,6 +24,7 @@ export interface OrgStats {
   totalTokens: number;
   avgDurationMs: number;
   errorRate: number;
+  storageUsedBytes?: number;
   byProject: Array<{
     projectId: string;
     projectName: string;
@@ -38,6 +39,17 @@ export interface OrgStats {
     responses: number;
     errors: number;
   }>;
+}
+
+export interface AuditEntry {
+  id: string;
+  actorId: string;
+  actorType: "user" | "apiKey" | "system";
+  action: string;
+  resourceType: string;
+  resourceId: string | null;
+  details: Record<string, unknown> | null;
+  createdAt: string;
 }
 
 export interface OrgAgent {

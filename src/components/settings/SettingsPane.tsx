@@ -199,7 +199,7 @@ export function SettingsPane({ onClose, initialSection, onSectionChange }: Props
         </div>
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto px-8 pb-8">
-          <div className="max-w-2xl">
+          <div className={activeSection === "analytics" ? "" : "max-w-2xl"}>
             {renderContent()}
           </div>
         </div>

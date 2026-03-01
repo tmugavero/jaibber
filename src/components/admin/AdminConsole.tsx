@@ -3,54 +3,15 @@ import { useOrgStore } from "@/stores/orgStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
 import { CreateOrgInline } from "@/components/org/CreateOrgInline";
-import type { OrgAgent } from "@/types/org";
-
-function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
-  return (
-    <div className="bg-card border border-border rounded-xl p-4">
-      <div className="text-xs text-muted-foreground mb-1">{label}</div>
-      <div className="text-2xl font-bold text-foreground">{value}</div>
-      {sub && <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>}
-    </div>
-  );
-}
-
-function AgentCard({ agent }: { agent: OrgAgent }) {
-  const username = agent.data?.username ?? "Unknown";
-  return (
-    <div className="flex items-center gap-3 bg-card border border-border rounded-xl p-4">
-      <div className="relative">
-        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold text-primary">
-          {username.charAt(0).toUpperCase()}
-        </div>
-        <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-card" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-foreground truncate">{username}</div>
-        <div className="text-xs text-muted-foreground truncate">{agent.projectName}</div>
-      </div>
-      <div className="text-xs text-emerald-400 font-medium">Online</div>
-    </div>
-  );
-}
-
-function UsageBar({ label, value, max }: { label: string; value: number; max: number }) {
-  const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
-  return (
-    <div>
-      <div className="flex justify-between text-xs mb-1">
-        <span className="text-muted-foreground">{label}</span>
-        <span className="text-foreground font-medium">{value}</span>
-      </div>
-      <div className="h-2 bg-muted/40 rounded-full overflow-hidden">
-        <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  );
-}
+import { KpiCards } from "./KpiCards";
+import { ActivityChart } from "./ActivityChart";
+import { ProjectDistribution } from "./ProjectDistribution";
+import { AgentFleetPanel } from "./AgentFleetPanel";
+import { QuotaGauges } from "./QuotaGauges";
+import { AuditFeed } from "./AuditFeed";
 
 export function AdminConsole() {
-  const { activeOrgId, orgs, stats, agents, loadingStats, loadingAgents } = useOrgStore();
+  const { activeOrgId, orgs, stats, agents, loadingStats, loadingAgents, auditEntries, loadingAudit } = useOrgStore();
   const [range, setRange] = useState("7d");
   const [copiedId, setCopiedId] = useState(false);
   const { apiBaseUrl } = useSettingsStore((s) => s.settings);
@@ -61,6 +22,7 @@ export function AdminConsole() {
     if (!activeOrgId || !apiBaseUrl || !token) return;
     useOrgStore.getState().loadStats(apiBaseUrl, token, activeOrgId, range);
     useOrgStore.getState().loadAgents(apiBaseUrl, token, activeOrgId);
+    useOrgStore.getState().loadAudit(apiBaseUrl, token, activeOrgId);
   }, [activeOrgId, apiBaseUrl, token, range]);
 
   if (!activeOrgId) {
@@ -69,20 +31,31 @@ export function AdminConsole() {
 
   return (
     <div className="p-6 space-y-6 overflow-y-auto max-h-full">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">Operations Console</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-semibold text-foreground">Operations Console</h1>
+            {activeOrg && (
+              <span className="text-[10px] text-muted-foreground bg-muted/30 px-2 py-0.5 rounded-full capitalize">
+                {activeOrg.plan}
+              </span>
+            )}
+          </div>
           {activeOrg && (
             <div className="flex items-center gap-2 mt-1">
-              <span className="text-xs text-muted-foreground">Org ID:</span>
-              <code className="text-xs text-muted-foreground font-mono bg-muted/30 px-1.5 py-0.5 rounded">{activeOrgId}</code>
+              <span className="text-xs text-muted-foreground">{activeOrg.name}</span>
+              <span className="text-muted-foreground/40">·</span>
+              <code className="text-[10px] text-muted-foreground font-mono bg-muted/30 px-1.5 py-0.5 rounded">
+                {activeOrgId}
+              </code>
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(activeOrgId!);
                   setCopiedId(true);
                   setTimeout(() => setCopiedId(false), 2000);
                 }}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                 title="Copy Org ID"
               >
                 {copiedId ? "Copied!" : "Copy"}
@@ -96,7 +69,9 @@ export function AdminConsole() {
               key={r}
               onClick={() => setRange(r)}
               className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                range === r ? "bg-card shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                range === r
+                  ? "bg-card shadow text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {r === "1d" ? "Today" : r === "7d" ? "7 days" : "30 days"}
@@ -105,99 +80,41 @@ export function AdminConsole() {
         </div>
       </div>
 
+      {/* KPI Cards */}
+      {loadingStats ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-card border border-border rounded-xl p-4 h-[130px] animate-pulse" />
+          ))}
+        </div>
+      ) : stats ? (
+        <KpiCards stats={stats} />
+      ) : (
+        <div className="text-xs text-muted-foreground">No usage data available.</div>
+      )}
+
+      {/* Charts Row: Activity Trends + Project Distribution */}
+      {stats && (
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <div className="lg:col-span-3">
+            <ActivityChart stats={stats} />
+          </div>
+          <div className="lg:col-span-2">
+            <ProjectDistribution stats={stats} />
+          </div>
+        </div>
+      )}
+
       {/* Agent Fleet */}
-      <section>
-        <h2 className="text-sm font-medium text-foreground mb-3">Agent Fleet</h2>
-        {loadingAgents ? (
-          <div className="text-xs text-muted-foreground animate-pulse">Loading agents...</div>
-        ) : agents.length === 0 ? (
-          <div className="text-xs text-muted-foreground bg-muted/20 rounded-xl p-4 text-center">
-            No agents connected. Register a project on a desktop machine to start an agent.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {agents.map((agent, i) => (
-              <AgentCard key={`${agent.connectionId}-${i}`} agent={agent} />
-            ))}
-          </div>
-        )}
-      </section>
+      <AgentFleetPanel agents={agents} loading={loadingAgents} />
 
-      {/* Usage Stats */}
-      <section>
-        <h2 className="text-sm font-medium text-foreground mb-3">Usage Stats</h2>
-        {loadingStats ? (
-          <div className="text-xs text-muted-foreground animate-pulse">Loading stats...</div>
-        ) : !stats ? (
-          <div className="text-xs text-muted-foreground">No data available.</div>
-        ) : (
-          (() => {
-            // Normalize stats — API may return null/undefined for any field
-            const prompts = stats.totalPrompts ?? 0;
-            const responses = stats.totalResponses ?? 0;
-            const errors = stats.totalErrors ?? 0;
-            const errorRate = stats.errorRate ?? 0;
-            const avgMs = stats.avgDurationMs ?? 0;
-            const projectList = Array.isArray(stats.byProject) ? stats.byProject : [];
-            const dayList = Array.isArray(stats.byDay) ? stats.byDay : [];
-
-            return (
-              <>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                  <StatCard label="Prompts" value={prompts} />
-                  <StatCard label="Responses" value={responses} />
-                  <StatCard label="Errors" value={errors} sub={`${errorRate}% error rate`} />
-                  <StatCard label="Avg Response" value={`${(avgMs / 1000).toFixed(1)}s`} />
-                </div>
-
-                {/* Per-project breakdown */}
-                {projectList.length > 0 && (
-                  <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-                    <h3 className="text-xs font-medium text-muted-foreground">By Project</h3>
-                    {projectList.map((p) => {
-                      const total = (p.prompts ?? 0) + (p.responses ?? 0) + (p.errors ?? 0);
-                      return (
-                        <UsageBar
-                          key={p.projectId}
-                          label={p.projectName ?? "Unknown"}
-                          value={p.prompts ?? 0}
-                          max={Math.max(total, 1)}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Per-day chart (simple text-based) */}
-                {dayList.length > 0 && (
-                  <div className="bg-card border border-border rounded-xl p-4 mt-3">
-                    <h3 className="text-xs font-medium text-muted-foreground mb-3">Daily Activity</h3>
-                    <div className="flex items-end gap-1 h-24">
-                      {dayList.map((day) => {
-                        const maxDay = Math.max(...dayList.map((d) => (d.prompts ?? 0) + (d.responses ?? 0)), 1);
-                        const total = (day.prompts ?? 0) + (day.responses ?? 0);
-                        const pct = (total / maxDay) * 100;
-                        return (
-                          <div key={day.date} className="flex-1 flex flex-col items-center gap-1">
-                            <div
-                              className="w-full bg-primary/80 rounded-t min-h-[2px] transition-all"
-                              style={{ height: `${pct}%` }}
-                              title={`${day.date}: ${total} events`}
-                            />
-                            <div className="text-[9px] text-muted-foreground truncate w-full text-center">
-                              {day.date?.slice(5) ?? ""}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </>
-            );
-          })()
-        )}
-      </section>
+      {/* Quotas + Audit Feed */}
+      {activeOrg && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <QuotaGauges org={activeOrg} stats={stats} agentCount={agents.length} />
+          <AuditFeed entries={auditEntries} loading={loadingAudit} org={activeOrg} />
+        </div>
+      )}
     </div>
   );
 }

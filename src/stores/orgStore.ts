@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Org, OrgStats, OrgAgent } from "@/types/org";
+import type { Org, OrgStats, OrgAgent, AuditEntry } from "@/types/org";
 
 interface OrgStore {
   orgs: Org[];
@@ -8,11 +8,14 @@ interface OrgStore {
   agents: OrgAgent[];
   loadingStats: boolean;
   loadingAgents: boolean;
+  auditEntries: AuditEntry[];
+  loadingAudit: boolean;
 
   loadOrgs: (apiBaseUrl: string, token: string) => Promise<void>;
   setActiveOrg: (orgId: string | null) => void;
   loadStats: (apiBaseUrl: string, token: string, orgId: string, range?: string) => Promise<void>;
   loadAgents: (apiBaseUrl: string, token: string, orgId: string) => Promise<void>;
+  loadAudit: (apiBaseUrl: string, token: string, orgId: string) => Promise<void>;
   createOrg: (apiBaseUrl: string, token: string, name: string) => Promise<Org>;
 }
 
@@ -23,6 +26,8 @@ export const useOrgStore = create<OrgStore>((set) => ({
   agents: [],
   loadingStats: false,
   loadingAgents: false,
+  auditEntries: [],
+  loadingAudit: false,
 
   loadOrgs: async (apiBaseUrl, token) => {
     const res = await fetch(`${apiBaseUrl}/api/orgs`, {
@@ -40,7 +45,7 @@ export const useOrgStore = create<OrgStore>((set) => ({
     }
   },
 
-  setActiveOrg: (orgId) => set({ activeOrgId: orgId, stats: null, agents: [] }),
+  setActiveOrg: (orgId) => set({ activeOrgId: orgId, stats: null, agents: [], auditEntries: [] }),
 
   loadStats: async (apiBaseUrl, token, orgId, range = "7d") => {
     set({ loadingStats: true });
@@ -64,11 +69,29 @@ export const useOrgStore = create<OrgStore>((set) => ({
       });
       if (!res.ok) throw new Error(`Failed to load agents: ${res.status}`);
       const json = await res.json();
-      // Server returns { data: { registered, live }, meta } via api.success()
       const agents = json.data?.live ?? json.live ?? json.agents ?? [];
       set({ agents });
     } finally {
       set({ loadingAgents: false });
+    }
+  },
+
+  loadAudit: async (apiBaseUrl, token, orgId) => {
+    set({ loadingAudit: true });
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/orgs/${orgId}/audit?limit=20`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        // 403 = not on Team plan, just clear entries
+        set({ auditEntries: [] });
+        return;
+      }
+      const json = await res.json();
+      const entries = json.data ?? json.entries ?? [];
+      set({ auditEntries: entries });
+    } finally {
+      set({ loadingAudit: false });
     }
   },
 
