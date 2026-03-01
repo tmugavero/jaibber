@@ -36,13 +36,17 @@ const NAV_ITEMS: NavItem[] = [
   { id: "analytics", label: "Analytics", adminOnly: true },
 ];
 
+const VALID_SECTIONS: Set<string> = new Set(NAV_ITEMS.map((i) => i.id));
+
 interface Props {
   onClose: () => void;
-  initialSection?: Section;
+  initialSection?: string | null;
+  onSectionChange?: (section: Section) => void;
 }
 
-export function SettingsPane({ onClose, initialSection = "general" }: Props) {
-  const [activeSection, setActiveSection] = useState<Section>(initialSection);
+export function SettingsPane({ onClose, initialSection, onSectionChange }: Props) {
+  const startSection: Section = (initialSection && VALID_SECTIONS.has(initialSection) ? initialSection : "general") as Section;
+  const [activeSection, setActiveSection] = useState<Section>(startSection);
   const [mobileShowContent, setMobileShowContent] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -72,6 +76,7 @@ export function SettingsPane({ onClose, initialSection = "general" }: Props) {
 
   const handleNavClick = (section: Section) => {
     setActiveSection(section);
+    onSectionChange?.(section);
     if (isMobile) setMobileShowContent(true);
   };
 
@@ -164,7 +169,7 @@ export function SettingsPane({ onClose, initialSection = "general" }: Props) {
           {visibleItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveSection(item.id)}
+              onClick={() => handleNavClick(item.id)}
               className={cn(
                 "w-full text-left px-3 py-1.5 rounded-md text-sm transition-colors mb-0.5",
                 activeSection === item.id

@@ -131,58 +131,71 @@ export function AdminConsole() {
         ) : !stats ? (
           <div className="text-xs text-muted-foreground">No data available.</div>
         ) : (
-          <>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-              <StatCard label="Prompts" value={stats.totalPrompts} />
-              <StatCard label="Responses" value={stats.totalResponses} />
-              <StatCard label="Errors" value={stats.totalErrors} sub={`${stats.errorRate}% error rate`} />
-              <StatCard label="Avg Response" value={`${(stats.avgDurationMs / 1000).toFixed(1)}s`} />
-            </div>
+          (() => {
+            // Normalize stats — API may return null/undefined for any field
+            const prompts = stats.totalPrompts ?? 0;
+            const responses = stats.totalResponses ?? 0;
+            const errors = stats.totalErrors ?? 0;
+            const errorRate = stats.errorRate ?? 0;
+            const avgMs = stats.avgDurationMs ?? 0;
+            const projectList = Array.isArray(stats.byProject) ? stats.byProject : [];
+            const dayList = Array.isArray(stats.byDay) ? stats.byDay : [];
 
-            {/* Per-project breakdown */}
-            {stats.byProject?.length > 0 && (
-              <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-                <h3 className="text-xs font-medium text-muted-foreground">By Project</h3>
-                {stats.byProject.map((p) => {
-                  const total = p.prompts + p.responses + p.errors;
-                  return (
-                    <UsageBar
-                      key={p.projectId}
-                      label={p.projectName ?? "Unknown"}
-                      value={p.prompts}
-                      max={Math.max(total, 1)}
-                    />
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Per-day chart (simple text-based) */}
-            {stats.byDay?.length > 0 && (
-              <div className="bg-card border border-border rounded-xl p-4 mt-3">
-                <h3 className="text-xs font-medium text-muted-foreground mb-3">Daily Activity</h3>
-                <div className="flex items-end gap-1 h-24">
-                  {stats.byDay.map((day) => {
-                    const maxDay = Math.max(...(stats.byDay ?? []).map((d) => d.prompts + d.responses), 1);
-                    const total = day.prompts + day.responses;
-                    const pct = (total / maxDay) * 100;
-                    return (
-                      <div key={day.date} className="flex-1 flex flex-col items-center gap-1">
-                        <div
-                          className="w-full bg-primary/80 rounded-t min-h-[2px] transition-all"
-                          style={{ height: `${pct}%` }}
-                          title={`${day.date}: ${total} events`}
-                        />
-                        <div className="text-[9px] text-muted-foreground truncate w-full text-center">
-                          {day.date.slice(5)}
-                        </div>
-                      </div>
-                    );
-                  })}
+            return (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                  <StatCard label="Prompts" value={prompts} />
+                  <StatCard label="Responses" value={responses} />
+                  <StatCard label="Errors" value={errors} sub={`${errorRate}% error rate`} />
+                  <StatCard label="Avg Response" value={`${(avgMs / 1000).toFixed(1)}s`} />
                 </div>
-              </div>
-            )}
-          </>
+
+                {/* Per-project breakdown */}
+                {projectList.length > 0 && (
+                  <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+                    <h3 className="text-xs font-medium text-muted-foreground">By Project</h3>
+                    {projectList.map((p) => {
+                      const total = (p.prompts ?? 0) + (p.responses ?? 0) + (p.errors ?? 0);
+                      return (
+                        <UsageBar
+                          key={p.projectId}
+                          label={p.projectName ?? "Unknown"}
+                          value={p.prompts ?? 0}
+                          max={Math.max(total, 1)}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Per-day chart (simple text-based) */}
+                {dayList.length > 0 && (
+                  <div className="bg-card border border-border rounded-xl p-4 mt-3">
+                    <h3 className="text-xs font-medium text-muted-foreground mb-3">Daily Activity</h3>
+                    <div className="flex items-end gap-1 h-24">
+                      {dayList.map((day) => {
+                        const maxDay = Math.max(...dayList.map((d) => (d.prompts ?? 0) + (d.responses ?? 0)), 1);
+                        const total = (day.prompts ?? 0) + (day.responses ?? 0);
+                        const pct = (total / maxDay) * 100;
+                        return (
+                          <div key={day.date} className="flex-1 flex flex-col items-center gap-1">
+                            <div
+                              className="w-full bg-primary/80 rounded-t min-h-[2px] transition-all"
+                              style={{ height: `${pct}%` }}
+                              title={`${day.date}: ${total} events`}
+                            />
+                            <div className="text-[9px] text-muted-foreground truncate w-full text-center">
+                              {day.date?.slice(5) ?? ""}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()
         )}
       </section>
     </div>

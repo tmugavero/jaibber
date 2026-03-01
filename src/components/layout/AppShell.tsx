@@ -10,14 +10,17 @@ import { useAuthStore } from "@/stores/authStore";
 type AppView = "main" | "settings";
 
 /** Parse window.location.hash into view + optional params */
-function parseHash(): { view: AppView; contactId: string | null } {
+function parseHash(): { view: AppView; contactId: string | null; settingsSection: string | null } {
   const hash = window.location.hash.replace(/^#/, "");
-  if (hash === "settings") return { view: "settings", contactId: null };
+  if (hash === "settings" || hash.startsWith("settings/")) {
+    const section = hash.includes("/") ? hash.split("/")[1] : null;
+    return { view: "settings", contactId: null, settingsSection: section };
+  }
   if (hash.startsWith("chat/")) {
     const id = hash.slice(5);
-    return { view: "main", contactId: id || null };
+    return { view: "main", contactId: id || null, settingsSection: null };
   }
-  return { view: "main", contactId: null };
+  return { view: "main", contactId: null, settingsSection: null };
 }
 
 function useIsMobile() {
@@ -34,6 +37,7 @@ export function AppShell() {
   const initial = parseHash();
   const [activeContactId, setActiveContactId] = useState<string | null>(initial.contactId);
   const [view, setView] = useState<AppView>(initial.view);
+  const [settingsSection, setSettingsSection] = useState<string | null>(initial.settingsSection);
   const [showSidebar, setShowSidebar] = useState(true);
   const isMobile = useIsMobile();
 
@@ -42,6 +46,7 @@ export function AppShell() {
     const onHashChange = () => {
       const parsed = parseHash();
       setView(parsed.view);
+      setSettingsSection(parsed.settingsSection);
       if (parsed.contactId) {
         setActiveContactId(parsed.contactId);
         if (isMobile) setShowSidebar(false);
@@ -84,7 +89,15 @@ export function AppShell() {
 
   // Settings view takes over the entire screen
   if (view === "settings") {
-    return <SettingsPane onClose={() => navigate("main", activeContactId)} />;
+    return (
+      <SettingsPane
+        onClose={() => navigate("main", activeContactId)}
+        initialSection={settingsSection as any}
+        onSectionChange={(section) => {
+          window.history.replaceState(null, "", `#settings/${section}`);
+        }}
+      />
+    );
   }
 
   // Mobile: show either sidebar or content, not both
