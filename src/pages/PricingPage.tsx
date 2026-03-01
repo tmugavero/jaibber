@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { MarketingNav, MarketingFooter } from "./MarketingNav";
+import { PageLayout } from "@/components/marketing/PageLayout";
+import { CTASection } from "@/components/marketing/CTASection";
 import { FALLBACK_PLANS, fetchPlans } from "@/lib/plans";
 import type { Plan } from "@/lib/plans";
 import { cn } from "@/lib/cn";
@@ -29,8 +30,7 @@ export function PricingPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <MarketingNav />
+    <PageLayout>
 
       <section className="pt-32 pb-16 px-6">
         <div className="max-w-4xl mx-auto text-center">
@@ -116,23 +116,11 @@ export function PricingPage() {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-16 px-6 border-t border-border">
-        <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-2xl font-bold mb-4">Get started today</h2>
-          <p className="text-muted-foreground mb-8">
-            No credit card required. Start with the free plan and upgrade anytime.
-          </p>
-          <Link
-            to="/login"
-            className="inline-block bg-primary text-primary-foreground rounded-xl px-8 py-3.5 text-base font-semibold hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
-          >
-            Create Free Account
-          </Link>
-        </div>
-      </section>
-
-      <MarketingFooter />
-    </div>
+      <CTASection
+        title="Get started today"
+        subtitle="No credit card required. Start with the free plan and upgrade anytime."
+        buttonText="Create Free Account"
+      />
+    </PageLayout>
   );
 }
