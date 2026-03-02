@@ -18,6 +18,7 @@ const NAV_LINKS = [
   { to: "/features", label: "Features" },
   { to: "/use-cases", label: "Use Cases" },
   { to: "/developers", label: "Developers" },
+  { to: "/docs/", label: "Docs", external: true },
   { to: "/downloads", label: "Downloads" },
   { to: "/pricing", label: "Pricing" },
 ];
@@ -39,20 +40,30 @@ export function MarketingNav() {
 
         {/* Desktop links */}
         <div className="hidden md:flex items-center gap-6">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={cn(
-                "text-sm transition-colors",
-                location.pathname === link.to
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {link.label}
-            </Link>
-          ))}
+          {NAV_LINKS.map((link) =>
+            link.external ? (
+              <a
+                key={link.to}
+                href={link.to}
+                className="text-sm transition-colors text-muted-foreground hover:text-foreground"
+              >
+                {link.label}
+              </a>
+            ) : (
+              <Link
+                key={link.to}
+                to={link.to}
+                className={cn(
+                  "text-sm transition-colors",
+                  location.pathname === link.to
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {link.label}
+              </Link>
+            ),
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -94,20 +105,30 @@ export function MarketingNav() {
       {mobileOpen && (
         <div className="md:hidden border-t border-border bg-background/95 backdrop-blur-lg">
           <div className="px-6 py-4 space-y-3">
-            {NAV_LINKS.map((link) => (
-              <Link
-                key={link.to}
-                to={link.to}
-                className={cn(
-                  "block text-sm py-1 transition-colors",
-                  location.pathname === link.to
-                    ? "text-foreground font-semibold"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {link.label}
-              </Link>
-            ))}
+            {NAV_LINKS.map((link) =>
+              link.external ? (
+                <a
+                  key={link.to}
+                  href={link.to}
+                  className="block text-sm py-1 transition-colors text-muted-foreground hover:text-foreground"
+                >
+                  {link.label}
+                </a>
+              ) : (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  className={cn(
+                    "block text-sm py-1 transition-colors",
+                    location.pathname === link.to
+                      ? "text-foreground font-semibold"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {link.label}
+                </Link>
+              ),
+            )}
             {!loggedIn && (
               <Link
                 to="/login"
