@@ -18,6 +18,7 @@ const NAV_LINKS = [
   { to: "/features", label: "Features" },
   { to: "/use-cases", label: "Use Cases" },
   { to: "/developers", label: "Developers" },
+  { to: "/downloads", label: "Downloads" },
   { to: "/pricing", label: "Pricing" },
   { to: "/about", label: "About" },
 ];
@@ -154,6 +155,7 @@ export function MarketingFooter() {
             <div className="space-y-2">
               <Link to="/developers" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">API & Webhooks</Link>
               <Link to="/developers" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">Agent SDK</Link>
+              <Link to="/downloads" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">Downloads</Link>
             </div>
           </div>
 

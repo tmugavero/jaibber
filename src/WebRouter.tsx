@@ -12,6 +12,7 @@ import { TermsPage } from "@/pages/TermsPage";
 import { InvitePage } from "@/pages/InvitePage";
 import { ProjectInvitePage } from "@/pages/ProjectInvitePage";
 import { ResetPasswordPage } from "@/pages/ResetPasswordPage";
+import { DownloadsPage } from "@/pages/DownloadsPage";
 import { ScrollToTop } from "@/components/marketing/ScrollToTop";
 import "./App.css";
 
@@ -26,6 +27,7 @@ export default function WebRouter() {
         <Route path="/developers" element={<DevelopersPage />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/about" element={<AboutPage />} />
+        <Route path="/downloads" element={<DownloadsPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/login" element={<LoginPage />} />

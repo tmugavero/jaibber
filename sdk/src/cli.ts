@@ -9,6 +9,7 @@
  */
 
 import { JaibberAgent } from "./agent.js";
+import { JaibberClient } from "./client.js";
 
 // ── Arg parsing (zero-dep) ──────────────────────────────────────────
 
@@ -47,6 +48,7 @@ REQUIRED:
   --agent-name <name>       Agent display name (used for @mention routing)
 
 OPTIONAL:
+  --register                Create a new account (instead of logging into an existing one)
   --server <url>            Server URL (default: https://api.jaibber.com)
   --anthropic-key <key>     Anthropic API key — enables built-in Claude provider
   --instructions <text>     System prompt for the agent
@@ -55,7 +57,14 @@ OPTIONAL:
   --help                    Show this help message
 
 EXAMPLES:
-  # Basic agent with Claude provider
+  # Register a new account and start an agent
+  npx @jaibber/sdk \\
+    --register \\
+    --username coding-bot --password s3cret \\
+    --agent-name "CodingAgent" \\
+    --anthropic-key sk-ant-api03-...
+
+  # Login to existing account and start an agent
   npx @jaibber/sdk \\
     --username coding-bot --password s3cret \\
     --agent-name "CodingAgent" \\
@@ -87,6 +96,7 @@ const anthropicKey =
   args["anthropic-key"] || process.env.ANTHROPIC_API_KEY;
 const instructions = args["instructions"];
 const machineName = args["machine-name"];
+const shouldRegister = args["register"] === "true";
 const projectIds = args["projects"]
   ? args["projects"].split(",").map((s) => s.trim())
   : undefined;
@@ -104,6 +114,22 @@ if (!password) {
 if (!agentName) {
   console.error("Error: --agent-name is required");
   process.exit(1);
+}
+
+// ── Register account if requested ───────────────────────────────────
+
+if (shouldRegister) {
+  console.log(`[cli] Registering new account "${username}"...`);
+  const client = new JaibberClient(serverUrl);
+  try {
+    await client.register(username, password);
+    console.log(`[cli] Account created successfully.`);
+  } catch (err) {
+    console.error(
+      `[cli] Registration failed: ${err instanceof Error ? err.message : err}`,
+    );
+    process.exit(1);
+  }
 }
 
 // ── Start agent ─────────────────────────────────────────────────────

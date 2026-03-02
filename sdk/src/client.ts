@@ -24,6 +24,32 @@ export class JaibberClient {
 
   // ── Auth ────────────────────────────────────────────────────────────
 
+  /** POST /api/auth/register — create a new account, stores JWT. */
+  async register(username: string, password: string): Promise<void> {
+    const res = await fetch(`${this.serverUrl}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      if (res.status === 409) {
+        throw new Error(`Username "${username}" is already taken.`);
+      }
+      throw new Error(`Registration failed (${res.status}): ${text}`);
+    }
+
+    const data = (await res.json()) as {
+      token: string;
+      userId: string;
+      username: string;
+    };
+    this.jwt = data.token;
+    this.userId = data.userId;
+    this.username = data.username;
+  }
+
   /** POST /api/auth/token — login with credentials, stores JWT. */
   async login(username: string, password: string): Promise<void> {
     const res = await fetch(`${this.serverUrl}/api/auth/token`, {
