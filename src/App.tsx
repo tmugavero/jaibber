@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import "./App.css";
-import { storage, getSettings, saveSettings, isTauri } from "@/lib/platform";
+import { storage, getSettings, saveSettings, isTauri, checkForUpdates } from "@/lib/platform";
 import { loadMessages } from "@/lib/chatPersistence";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
@@ -135,6 +135,9 @@ function App({ onRequireLogin }: AppProps = {}) {
         useChatStore.getState().loadMessages(messages);
 
         setBootState("app");
+
+        // ── 8. Check for updates (desktop only, non-blocking) ────────────
+        checkForUpdates();
       } catch (e) {
         console.error("Boot error:", e);
         setBootState("login");

@@ -148,6 +148,28 @@ export async function openUrl(url: string): Promise<void> {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
+// ── Auto-updater (desktop only) ──────────────────────────────────────
+
+export async function checkForUpdates(): Promise<void> {
+  if (!isTauri) return;
+  try {
+    const { check } = await import("@tauri-apps/plugin-updater");
+    const update = await check();
+    if (update) {
+      const confirmed = window.confirm(
+        `Jaibber ${update.version} is available. Download and install?`
+      );
+      if (confirmed) {
+        await update.downloadAndInstall();
+        const { relaunch } = await import("@tauri-apps/plugin-process");
+        await relaunch();
+      }
+    }
+  } catch {
+    // Silently fail — updater not configured or no internet
+  }
+}
+
 // ── Tauri event listener (no-op on web) ──────────────────────────────
 
 export async function listenEvent<T>(

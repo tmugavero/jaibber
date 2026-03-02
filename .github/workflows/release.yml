@@ -15,37 +15,17 @@ jobs:
         include:
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
-            nats_asset: nats-server-v2.10.24-windows-amd64.zip
-            nats_binary: nats-server.exe
-            output_name: nats-server-x86_64-pc-windows-msvc.exe
           - platform: macos-latest
             target: x86_64-apple-darwin
-            nats_asset: nats-server-v2.10.24-darwin-amd64.zip
-            nats_binary: nats-server
-            output_name: nats-server-x86_64-apple-darwin
           - platform: macos-latest
             target: aarch64-apple-darwin
-            nats_asset: nats-server-v2.10.24-darwin-arm64.zip
-            nats_binary: nats-server
-            output_name: nats-server-aarch64-apple-darwin
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-            nats_asset: nats-server-v2.10.24-linux-amd64.zip
-            nats_binary: nats-server
-            output_name: nats-server-x86_64-unknown-linux-gnu
 
     runs-on: ${{ matrix.platform }}
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Download NATS server binary
-        shell: bash
-        run: |
-          curl -Lo nats.zip "https://github.com/nats-io/nats-server/releases/download/v2.10.24/${{ matrix.nats_asset }}"
-          unzip nats.zip
-          find . -name "${{ matrix.nats_binary }}" -not -path "./.git/*" | head -1 | xargs -I{} cp {} src-tauri/binaries/${{ matrix.output_name }}
-          chmod +x src-tauri/binaries/${{ matrix.output_name }} 2>/dev/null || true
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -80,7 +60,18 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Jaibber ${{ github.ref_name }}'
-          releaseBody: 'Cross-network LLM agent coordination hub'
+          releaseBody: |
+            ## Jaibber ${{ github.ref_name }}
+
+            Team chat for AI code agents. Connect AI agents running on any machine into shared project channels.
+
+            ### Downloads
+            - **Windows:** `.msi` installer
+            - **macOS:** `.dmg` (Intel & Apple Silicon)
+            - **Linux:** `.deb` / `.AppImage`
+
+            ### What's New
+            See [changelog](https://jaibber.com/changelog) for details.
           releaseDraft: true
           prerelease: false
           args: --target ${{ matrix.target }}
