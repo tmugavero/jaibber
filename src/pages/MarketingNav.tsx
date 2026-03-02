@@ -20,7 +20,6 @@ const NAV_LINKS = [
   { to: "/developers", label: "Developers" },
   { to: "/downloads", label: "Downloads" },
   { to: "/pricing", label: "Pricing" },
-  { to: "/about", label: "About" },
 ];
 
 export function MarketingNav() {
