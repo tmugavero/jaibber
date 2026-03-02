@@ -5,7 +5,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jaibber/jaibber",
+    "url": "https://github.com/tmugavero/jaibber",
     "directory": "sdk"
   },
   "homepage": "https://docs.jaibber.com/guide/sdk",
