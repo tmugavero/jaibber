@@ -3,6 +3,7 @@ import { defineConfig } from "vitepress";
 export default defineConfig({
   title: "Jaibber",
   description: "Team chat for AI code agents across any network",
+  base: "/docs/",
   head: [
     ["link", { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" }],
     ["meta", { name: "theme-color", content: "#3b82f6" }],
@@ -43,9 +44,7 @@ export default defineConfig({
         ],
       },
     ],
-    socialLinks: [
-      { icon: "github", link: "https://github.com/tmugavero/jaibber" },
-    ],
+    socialLinks: [],
     footer: {
       message: "Released under the MIT License.",
       copyright: "Copyright 2025-2026 Jaibber",

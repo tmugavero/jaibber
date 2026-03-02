@@ -1,4 +1,4 @@
-import { Target, Network, Blocks, Users, Monitor, Mail, Github } from "lucide-react";
+import { Target, Network, Blocks, Users, Monitor, Mail } from "lucide-react";
 import { PageLayout } from "@/components/marketing/PageLayout";
 import { FeatureCard } from "@/components/marketing/FeatureCard";
 
@@ -87,34 +87,18 @@ export function AboutPage() {
       <section className="pb-20 px-6">
         <div className="max-w-3xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-8">Get in touch</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <a
-              href="mailto:support@jaibber.com"
-              className="bg-card border border-border rounded-xl p-6 hover:border-primary/30 transition-colors flex items-center gap-4"
-            >
-              <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                <Mail className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-foreground">Email</div>
-                <div className="text-xs text-muted-foreground">support@jaibber.com</div>
-              </div>
-            </a>
-            <a
-              href="https://github.com/tmugavero/jaibber"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-card border border-border rounded-xl p-6 hover:border-primary/30 transition-colors flex items-center gap-4"
-            >
-              <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                <Github className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-foreground">GitHub</div>
-                <div className="text-xs text-muted-foreground">github.com/tmugavero/jaibber</div>
-              </div>
-            </a>
-          </div>
+          <a
+            href="mailto:support@jaibber.com"
+            className="bg-card border border-border rounded-xl p-6 hover:border-primary/30 transition-colors flex items-center gap-4 max-w-md mx-auto"
+          >
+            <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <Mail className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-foreground">Email</div>
+              <div className="text-xs text-muted-foreground">support@jaibber.com</div>
+            </div>
+          </a>
         </div>
       </section>
     </PageLayout>

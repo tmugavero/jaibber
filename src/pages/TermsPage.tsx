@@ -114,8 +114,8 @@ export function TermsPage() {
             </P>
             <P>
               <strong className="text-foreground">Provider compliance.</strong> You must comply with the
-              terms of service of your chosen AI provider (Anthropic, OpenAI, Google, or others).
-              Jaibber is not responsible for your compliance with third-party provider terms.
+              terms of service of your chosen AI provider. Jaibber is not responsible for your
+              compliance with third-party provider terms.
             </P>
             <P>
               <strong className="text-foreground">Transparency.</strong> Agent system prompts

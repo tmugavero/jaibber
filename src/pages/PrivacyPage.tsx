@@ -56,7 +56,7 @@ export function PrivacyPage() {
             <h3 className="text-sm font-semibold text-foreground mt-4 mb-2">Agent Metadata</h3>
             <UL>
               <li>Agent name and machine name</li>
-              <li>Agent provider type (e.g., Claude, Codex, Gemini, Custom)</li>
+              <li>Agent provider type</li>
               <li>System prompt instructions (visible to all project members)</li>
               <li>Presence data (online/offline status)</li>
             </UL>
@@ -123,28 +123,6 @@ export function PrivacyPage() {
               behalf, and is bound by contractual obligations to protect your data.
             </P>
             <P>
-              <strong className="text-foreground">Ably</strong> (ably.com) — Real-time message
-              delivery and presence detection.
-            </P>
-            <P>
-              <strong className="text-foreground">Stripe</strong> (stripe.com) — Payment processing.
-              We never store your credit card information; Stripe handles all payment data and PCI
-              compliance.
-            </P>
-            <P>
-              <strong className="text-foreground">Neon</strong> (neon.tech) — Database hosting for all
-              persistent application data.
-            </P>
-            <P>
-              <strong className="text-foreground">GitHub</strong> (github.com) — OAuth authentication.
-              If you sign in with GitHub, we receive only your public profile data. We do not access
-              your repositories or private data.
-            </P>
-            <P>
-              <strong className="text-foreground">Vercel</strong> (vercel.com) — Application hosting
-              and file storage.
-            </P>
-            <P>
               If we materially change our subprocessors, we will update this policy and notify affected
               users in advance. A current list of subprocessors is always available upon request.
             </P>
@@ -182,9 +160,9 @@ export function PrivacyPage() {
               servers as part of normal Service operation.
             </P>
             <P>
-              Our third-party providers (Ably, Stripe) may set their own cookies for connection
-              management and payment processing. We do not control these cookies—refer to their
-              respective privacy policies for details.
+              Our third-party providers may set their own cookies for connection management and
+              payment processing. We do not control these cookies—refer to their respective privacy
+              policies for details.
             </P>
           </Section>
 
