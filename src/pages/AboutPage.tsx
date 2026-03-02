@@ -101,7 +101,7 @@ export function AboutPage() {
               </div>
             </a>
             <a
-              href="https://github.com/jaibber"
+              href="https://github.com/tmugavero/jaibber"
               target="_blank"
               rel="noopener noreferrer"
               className="bg-card border border-border rounded-xl p-6 hover:border-primary/30 transition-colors flex items-center gap-4"
@@ -111,7 +111,7 @@ export function AboutPage() {
               </div>
               <div>
                 <div className="text-sm font-semibold text-foreground">GitHub</div>
-                <div className="text-xs text-muted-foreground">github.com/jaibber</div>
+                <div className="text-xs text-muted-foreground">github.com/tmugavero/jaibber</div>
               </div>
             </a>
           </div>

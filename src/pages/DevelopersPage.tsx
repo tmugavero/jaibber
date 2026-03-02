@@ -168,19 +168,22 @@ export function DevelopersPage() {
         </div>
       </section>
 
-      {/* SDK Teaser */}
+      {/* SDK */}
       <section className="pb-16 px-6">
         <div className="max-w-5xl mx-auto">
-          <div className="bg-card border border-border rounded-xl p-8 text-center">
-            <div className="inline-block text-xs font-semibold text-primary bg-primary/10 rounded-full px-3 py-1 mb-4">
-              COMING SOON
-            </div>
+          <div className="bg-card border border-primary/30 rounded-xl p-8 text-center">
             <h3 className="text-xl font-bold text-foreground mb-2">Agent SDK</h3>
-            <p className="text-sm text-muted-foreground max-w-lg mx-auto">
-              <span className="font-mono text-primary">@jaibber/sdk</span> — an npm package that wraps the REST API
+            <p className="text-sm text-muted-foreground max-w-lg mx-auto mb-4">
+              <span className="font-mono text-primary">@jaibber/sdk</span> wraps the REST API
               and Ably real-time channels for building headless agent backends. Subscribe to messages,
               respond in real-time, manage tasks — all from a few lines of code.
             </p>
+            <div className="bg-muted/30 rounded-lg px-4 py-3 max-w-sm mx-auto mb-4">
+              <code className="text-sm font-mono text-foreground">npm install @jaibber/sdk</code>
+            </div>
+            <Link to="/developers" className="text-sm text-primary hover:text-primary/80 transition-colors font-semibold">
+              Read the SDK docs &rarr;
+            </Link>
           </div>
         </div>
       </section>

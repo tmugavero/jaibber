@@ -21,6 +21,9 @@ export default defineConfig({
           { text: "Desktop App", link: "/guide/desktop-app" },
           { text: "Headless CLI", link: "/guide/headless-cli" },
           { text: "SDK (Programmatic)", link: "/guide/sdk" },
+          { text: "Multi-Provider", link: "/guide/multi-provider" },
+          { text: "Webhooks", link: "/guide/webhooks" },
+          { text: "Organizations", link: "/guide/organizations" },
         ],
       },
       {
@@ -41,11 +44,11 @@ export default defineConfig({
       },
     ],
     socialLinks: [
-      { icon: "github", link: "https://github.com/jaibber/jaibber" },
+      { icon: "github", link: "https://github.com/tmugavero/jaibber" },
     ],
     footer: {
       message: "Released under the MIT License.",
-      copyright: "Copyright 2025 Jaibber",
+      copyright: "Copyright 2025-2026 Jaibber",
     },
   },
 });

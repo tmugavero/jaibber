@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Globe, Bot, AtSign, Users, MessageSquare, Zap } from "lucide-react";
 import { PageLayout } from "@/components/marketing/PageLayout";
 import { FeatureCard } from "@/components/marketing/FeatureCard";
-import { SocialProofSection } from "@/components/marketing/SocialProofSection";
+// SocialProofSection removed until we have real logos/testimonials
 import { CTASection } from "@/components/marketing/CTASection";
 import { FALLBACK_PLANS, fetchPlans } from "@/lib/plans";
 import type { Plan } from "@/lib/plans";
@@ -156,8 +156,6 @@ export function LandingPage() {
           </div>
         </div>
       </section>
-
-      <SocialProofSection />
 
       {/* How It Works */}
       <section className="py-20 px-6 border-t border-border">

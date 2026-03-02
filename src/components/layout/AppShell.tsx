@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 import { ContactList } from "@/components/contacts/ContactList";
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import { SettingsPane } from "@/components/settings/SettingsPane";
+import { WelcomeGuide } from "@/components/onboarding/WelcomeGuide";
 import { useAbly } from "@/hooks/useAbly";
 import { useOrgStore } from "@/stores/orgStore";
+import { useContactStore } from "@/stores/contactStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -40,6 +42,8 @@ export function AppShell() {
   const [settingsSection, setSettingsSection] = useState<string | null>(initial.settingsSection);
   const [showSidebar, setShowSidebar] = useState(true);
   const isMobile = useIsMobile();
+  const contactCount = useContactStore((s) => Object.keys(s.contacts).length);
+  const hasNoProjects = contactCount === 0;
 
   // Sync hash → state on browser back/forward
   useEffect(() => {
@@ -87,6 +91,13 @@ export function AppShell() {
     if (isMobile) setShowSidebar(false);
   };
 
+  // When onboarding creates/joins a project, auto-select it
+  const handleProjectCreated = (projectId: string) => {
+    setActiveContactId(projectId);
+    navigate("main", projectId);
+    if (isMobile) setShowSidebar(false);
+  };
+
   // Settings view takes over the entire screen
   if (view === "settings") {
     return (
@@ -100,26 +111,36 @@ export function AppShell() {
     );
   }
 
+  // Determine what to show in the main content area
+  const renderContent = (onBack?: () => void) => {
+    if (activeContactId) {
+      return <ChatWindow contactId={activeContactId} onBack={onBack} />;
+    }
+    if (hasNoProjects) {
+      return <WelcomeGuide onProjectCreated={handleProjectCreated} />;
+    }
+    return <EmptyState />;
+  };
+
   // Mobile: show either sidebar or content, not both
   if (isMobile) {
     return (
       <div className="flex flex-col h-[100dvh] w-screen overflow-hidden bg-background">
         {showSidebar ? (
-          <ContactList
-            activeId={activeContactId}
-            onSelect={handleSelectContact}
-            onOpenSettings={() => navigate("settings")}
-          />
+          hasNoProjects ? (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <WelcomeGuide onProjectCreated={handleProjectCreated} />
+            </div>
+          ) : (
+            <ContactList
+              activeId={activeContactId}
+              onSelect={handleSelectContact}
+              onOpenSettings={() => navigate("settings")}
+            />
+          )
         ) : (
           <div className="flex-1 flex flex-col overflow-hidden">
-            {activeContactId ? (
-              <ChatWindow
-                contactId={activeContactId}
-                onBack={() => setShowSidebar(true)}
-              />
-            ) : (
-              <EmptyState />
-            )}
+            {renderContent(() => setShowSidebar(true))}
           </div>
         )}
       </div>
@@ -137,11 +158,7 @@ export function AppShell() {
         />
       </div>
       <div className="flex-1 flex flex-col overflow-hidden">
-        {activeContactId ? (
-          <ChatWindow contactId={activeContactId} />
-        ) : (
-          <EmptyState />
-        )}
+        {renderContent()}
       </div>
     </div>
   );
