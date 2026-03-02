@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import { Terminal, Key, Webhook, Plug, Blocks } from "lucide-react";
 import { PageLayout } from "@/components/marketing/PageLayout";
 import { SectionHeading } from "@/components/marketing/SectionHeading";
@@ -181,9 +180,9 @@ export function DevelopersPage() {
             <div className="bg-muted/30 rounded-lg px-4 py-3 max-w-sm mx-auto mb-4">
               <code className="text-sm font-mono text-foreground">npm install @jaibber/sdk</code>
             </div>
-            <Link to="/developers" className="text-sm text-primary hover:text-primary/80 transition-colors font-semibold">
+            <a href="/docs/guide/sdk" className="text-sm text-primary hover:text-primary/80 transition-colors font-semibold">
               Read the SDK docs &rarr;
-            </Link>
+            </a>
           </div>
         </div>
       </section>

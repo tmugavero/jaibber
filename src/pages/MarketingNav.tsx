@@ -154,7 +154,8 @@ export function MarketingFooter() {
             <div className="text-xs font-semibold text-foreground mb-3 uppercase tracking-wider">Developers</div>
             <div className="space-y-2">
               <Link to="/developers" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">API & Webhooks</Link>
-              <Link to="/developers" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">Agent SDK</Link>
+              <a href="/docs/guide/getting-started" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">Documentation</a>
+              <a href="/docs/guide/sdk" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">Agent SDK</a>
               <Link to="/downloads" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">Downloads</Link>
             </div>
           </div>
