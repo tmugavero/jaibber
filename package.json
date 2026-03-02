@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:web": "tsc && vite build --config vite.config.web.ts",
+    "build:web": "tsc && vite build --config vite.config.web.ts && npm run docs:build && cp -r docs/.vitepress/dist dist/docs",
     "preview": "vite preview",
     "tauri": "tauri",
     "docs:dev": "vitepress dev docs",

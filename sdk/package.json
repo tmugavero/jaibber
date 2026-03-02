@@ -32,7 +32,7 @@
     }
   },
   "bin": {
-    "jaibber-agent": "./dist/cli.js"
+    "jaibber-agent": "dist/cli.js"
   },
   "files": [
     "dist"
