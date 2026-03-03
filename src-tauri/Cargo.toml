@@ -1,6 +1,6 @@
 [package]
 name = "jaibber"
-version = "0.1.0"
+version = "0.1.1"
 description = "Telegram-style chat with Claude Code agents"
 authors = ["you"]
 edition = "2021"
