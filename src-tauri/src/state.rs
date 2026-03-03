@@ -34,7 +34,7 @@ impl Default for AppSettings {
             openai_api_key: None,
             google_api_key: None,
             machine_name: String::new(),
-            api_base_url: String::new(),
+            api_base_url: String::from("https://api.jaibber.com"),
         }
     }
 }

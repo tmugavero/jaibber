@@ -70,15 +70,10 @@ function App({ onRequireLogin }: AppProps = {}) {
             await saveSettings(savedSettings);
           } else {
             const savedUrl = await storage.get<string>("api_base_url");
-            if (savedUrl) {
-              apiBaseUrl = savedUrl;
-              const recovered = { ...settings, apiBaseUrl: savedUrl };
-              useSettingsStore.getState().setSettings(recovered);
-              await saveSettings(recovered);
-            } else {
-              setBootState("login");
-              return;
-            }
+            apiBaseUrl = savedUrl || "https://api.jaibber.com";
+            const recovered = { ...settings, apiBaseUrl };
+            useSettingsStore.getState().setSettings(recovered);
+            await saveSettings(recovered);
           }
         } else {
           useSettingsStore.getState().setSettings(settings);
