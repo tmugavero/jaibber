@@ -8,6 +8,7 @@ import { useContactStore } from "@/stores/contactStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useOrgStore } from "@/stores/orgStore";
+import { syncRegistrations } from "@/lib/agentSync";
 import { AppShell } from "@/components/layout/AppShell";
 import { LoginScreen } from "@/components/auth/LoginScreen";
 
@@ -125,6 +126,11 @@ function App({ onRequireLogin }: AppProps = {}) {
           useProjectStore.getState().setProjects(migrated);
         }
 
+        // ── 6b. Sync agent registrations with server (non-blocking) ──────
+        if (isTauri) {
+          syncRegistrations().catch(() => {});
+        }
+
         // ── 7. Load chat history ───────────────────────────────────────────
         const messages = await loadMessages();
         useChatStore.getState().loadMessages(messages);
@@ -161,6 +167,11 @@ function App({ onRequireLogin }: AppProps = {}) {
 
       const messages = await loadMessages();
       useChatStore.getState().loadMessages(messages);
+
+      // Sync agent registrations after login (non-blocking)
+      if (isTauri) {
+        syncRegistrations().catch(() => {});
+      }
 
       setBootState("app");
     } catch (e) {

@@ -7,6 +7,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useOrgStore } from "@/stores/orgStore";
 import { getAbly } from "@/lib/ably";
+import { pushRegistration, deleteRegistration } from "@/lib/agentSync";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { LocalProject } from "@/stores/projectStore";
 import type { Contact } from "@/types/contact";
@@ -103,6 +104,7 @@ function ProjectCard({ contact }: { contact: Contact }) {
   const [confirmAction, setConfirmAction] = useState<{ title: string; description: string; onConfirm: () => void; variant?: "destructive" } | null>(null);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
+  const [relinkDir, setRelinkDir] = useState("");
 
   const defaultAgentName = useSettingsStore.getState().settings.machineName || "Agent";
 
@@ -237,6 +239,8 @@ function ProjectCard({ contact }: { contact: Contact }) {
     };
     useProjectStore.getState().addProject(updated);
     saveProjects(useProjectStore.getState().projects);
+    if (newName !== lp.agentName) deleteRegistration(contact.id, lp.agentName);
+    pushRegistration(updated);
     setEditingAgent(null);
     setEditError(null);
   };
@@ -265,6 +269,7 @@ function ProjectCard({ contact }: { contact: Contact }) {
     };
     useProjectStore.getState().addProject(lp);
     saveProjects(useProjectStore.getState().projects);
+    pushRegistration(lp);
     setLinking(false);
     setLinkDir("");
     setLinkAgentName("");
@@ -277,6 +282,16 @@ function ProjectCard({ contact }: { contact: Contact }) {
   const handleUnlink = (agentName: string) => {
     useProjectStore.getState().removeAgent(contact.id, agentName);
     saveProjects(useProjectStore.getState().projects);
+    deleteRegistration(contact.id, agentName);
+  };
+
+  const handleRelink = (lp: LocalProject) => {
+    if (!relinkDir.trim()) return;
+    const updated: LocalProject = { ...lp, projectDir: relinkDir.trim() };
+    useProjectStore.getState().addProject(updated);
+    saveProjects(useProjectStore.getState().projects);
+    pushRegistration(updated);
+    setRelinkDir("");
   };
 
   const handleLeaveProject = () => {
@@ -297,6 +312,7 @@ function ProjectCard({ contact }: { contact: Contact }) {
             useContactStore.getState().removeContact(contact.id);
             useProjectStore.getState().removeProject(contact.id);
             saveProjects(useProjectStore.getState().projects.filter((x) => x.projectId !== contact.id));
+            deleteRegistration(contact.id);
           }
         } catch { /* ignore */ }
       },
@@ -321,6 +337,7 @@ function ProjectCard({ contact }: { contact: Contact }) {
             useContactStore.getState().removeContact(contact.id);
             useProjectStore.getState().removeProject(contact.id);
             saveProjects(useProjectStore.getState().projects.filter((x) => x.projectId !== contact.id));
+            deleteRegistration(contact.id);
           }
         } catch { /* ignore */ }
       },
@@ -505,8 +522,58 @@ function ProjectCard({ contact }: { contact: Contact }) {
       )}
 
       {/* Local agents — desktop only, not for org-admin view-only */}
-      {!isOrgAdmin && isTauri && localAgents.map((lp) => (
-        editingAgent === lp.agentName ? (
+      {!isOrgAdmin && isTauri && localAgents.map((lp) => {
+        const needsRelink = !lp.projectDir && lp.agentProvider !== "openclaw";
+
+        if (needsRelink && editingAgent !== lp.agentName) {
+          /* Restored from server — needs local directory re-link */
+          return (
+            <div key={lp.agentName} className="border-t border-amber-500/30 bg-amber-500/5 px-3 py-2 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-amber-400 font-medium">
+                  {lp.agentName}
+                </span>
+                {lp.agentProvider && lp.agentProvider !== "claude" && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground font-medium">
+                    {PROVIDER_LABELS[lp.agentProvider] || lp.agentProvider}
+                  </span>
+                )}
+                <span className="text-[10px] text-amber-400/70 flex-1">
+                  restored from cloud — needs local directory
+                </span>
+              </div>
+              {lp.agentInstructions && (
+                <div className="text-[10px] text-muted-foreground line-clamp-1">
+                  {lp.agentInstructions}
+                </div>
+              )}
+              <div className="flex gap-2 items-end">
+                <input
+                  type="text"
+                  value={relinkDir}
+                  onChange={(e) => setRelinkDir(e.target.value)}
+                  placeholder="Local path, e.g. C:\Projects\my-project"
+                  className={inputClass + " text-xs font-mono flex-1"}
+                />
+                <button
+                  onClick={() => handleRelink(lp)}
+                  disabled={!relinkDir.trim()}
+                  className="px-2.5 py-1 rounded text-[11px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  Link
+                </button>
+                <button
+                  onClick={() => handleUnlink(lp.agentName)}
+                  className="text-[11px] text-destructive hover:text-destructive/80 transition-colors flex-shrink-0"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          );
+        }
+
+        return editingAgent === lp.agentName ? (
           /* Edit form for this agent */
           <div key={lp.agentName} className="border-t border-border/50 bg-muted/10 px-3 py-2 space-y-2">
             <input
@@ -591,8 +658,8 @@ function ProjectCard({ contact }: { contact: Contact }) {
               </div>
             )}
           </div>
-        )
-      ))}
+        );
+      })}
 
       {/* Add agent button — desktop only, not org-admin */}
       {!isOrgAdmin && isTauri && !linking && (
@@ -800,6 +867,7 @@ export function ProjectsPanel() {
         };
         useProjectStore.getState().addProject(newLocal);
         saveProjects(useProjectStore.getState().projects);
+        pushRegistration(newLocal);
       }
 
       // Notify other org members to refresh their project list
