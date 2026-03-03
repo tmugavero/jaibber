@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { isTauri } from "@/lib/platform";
 import { useOrgStore } from "@/stores/orgStore";
 import { GeneralSection } from "./sections/GeneralSection";
@@ -42,6 +42,74 @@ interface Props {
   onClose: () => void;
   initialSection?: string | null;
   onSectionChange?: (section: Section) => void;
+}
+
+function OrgSwitcher({ className }: { className?: string }) {
+  const orgs = useOrgStore((s) => s.orgs);
+  const activeOrgId = useOrgStore((s) => s.activeOrgId);
+  const setActiveOrg = useOrgStore((s) => s.setActiveOrg);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const activeOrg = orgs.find((o) => o.id === activeOrgId);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  if (orgs.length === 0) return null;
+
+  // Single org — just show it, no dropdown
+  if (orgs.length === 1) {
+    return (
+      <div className={cn("px-3 py-2", className)}>
+        <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Managing</div>
+        <div className="text-sm font-medium text-foreground truncate">{activeOrg?.name ?? "—"}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={ref} className={cn("relative", className)}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full px-3 py-2 text-left hover:bg-muted/30 rounded-md transition-colors"
+      >
+        <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Managing</div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium text-foreground truncate">{activeOrg?.name ?? "—"}</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground flex-shrink-0">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </div>
+      </button>
+      {open && (
+        <div className="absolute left-2 right-2 top-full mt-1 bg-popover border border-border rounded-md shadow-lg z-50 py-1">
+          {orgs.map((org) => (
+            <button
+              key={org.id}
+              onClick={() => { setActiveOrg(org.id); setOpen(false); }}
+              className={cn(
+                "w-full text-left px-3 py-1.5 text-sm transition-colors flex items-center justify-between",
+                org.id === activeOrgId
+                  ? "bg-muted/50 text-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+              )}
+            >
+              <span className="truncate">{org.name}</span>
+              <span className="text-[10px] text-muted-foreground ml-2 flex-shrink-0">{org.role}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function SettingsPane({ onClose, initialSection, onSectionChange }: Props) {
@@ -138,6 +206,7 @@ export function SettingsPane({ onClose, initialSection, onSectionChange }: Props
             </svg>
           </button>
         </div>
+        <OrgSwitcher className="mx-2 mt-1" />
         {/* Nav list */}
         <div className="flex-1 overflow-y-auto p-2">
           {visibleItems.map((item) => (
@@ -165,6 +234,7 @@ export function SettingsPane({ onClose, initialSection, onSectionChange }: Props
         <div className="px-4 pt-5 pb-3 flex items-center justify-between">
           <h1 className="text-lg font-semibold text-foreground">Settings</h1>
         </div>
+        <OrgSwitcher className="mx-2 mb-2" />
         <nav className="flex-1 overflow-y-auto px-2 pb-4">
           {visibleItems.map((item) => (
             <button
