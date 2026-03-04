@@ -13,7 +13,7 @@ type Mode = "signin" | "register";
 
 export function LoginScreen({ onLogin }: Props) {
   const [tab, setTab] = useState<Tab>("credentials");
-  const [mode, setMode] = useState<Mode>("signin");
+  const [mode, setMode] = useState<Mode>("register");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -166,7 +166,35 @@ export function LoginScreen({ onLogin }: Props) {
         </div>
 
         <div className="bg-card rounded-2xl border border-border p-6 shadow-xl space-y-4">
-          {/* Tab switcher */}
+          {/* Mode switcher — Register / Sign In */}
+          {tab === "credentials" && !showForgot && (
+            <div className="flex gap-1 bg-muted/30 rounded-lg p-1">
+              <button
+                onClick={() => { setMode("register"); setConfirmPassword(""); setError(null); }}
+                className={cn(
+                  "flex-1 rounded-md py-2 text-sm font-semibold transition-colors",
+                  mode === "register"
+                    ? "bg-card shadow text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Register
+              </button>
+              <button
+                onClick={() => { setMode("signin"); setConfirmPassword(""); setEmail(""); setError(null); }}
+                className={cn(
+                  "flex-1 rounded-md py-2 text-sm font-semibold transition-colors",
+                  mode === "signin"
+                    ? "bg-card shadow text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Sign In
+              </button>
+            </div>
+          )}
+
+          {/* Auth method tabs */}
           <div className="flex gap-1 bg-muted/30 rounded-lg p-1">
             {(["credentials", "github"] as Tab[]).map((t) => (
               <button
@@ -305,15 +333,6 @@ export function LoginScreen({ onLogin }: Props) {
                     ? (mode === "register" ? "Creating account..." : "Signing in...")
                     : (mode === "register" ? "Create account" : "Sign in")}
                 </button>
-                <p className="text-xs text-center text-muted-foreground">
-                  {mode === "signin" ? "No account? " : "Already have an account? "}
-                  <button
-                    onClick={() => { setMode(mode === "signin" ? "register" : "signin"); setConfirmPassword(""); setEmail(""); setError(null); }}
-                    className="text-primary hover:underline"
-                  >
-                    {mode === "signin" ? "Register" : "Sign in"}
-                  </button>
-                </p>
                 {mode === "signin" && (
                   <p className="text-xs text-center text-muted-foreground">
                     <button

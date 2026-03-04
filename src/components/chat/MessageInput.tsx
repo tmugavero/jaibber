@@ -209,6 +209,8 @@ export function MessageInput({ onSend, disabled, agents = [], projectId }: Props
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
+    // Re-focus textarea so user can keep typing
+    requestAnimationFrame(() => textareaRef.current?.focus());
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -233,6 +235,7 @@ export function MessageInput({ onSend, disabled, agents = [], projectId }: Props
         e.preventDefault();
         // Move cursor past the @ to dismiss
         setCursorPos(cursorPos + 1);
+        textareaRef.current?.focus();
         return;
       }
     }

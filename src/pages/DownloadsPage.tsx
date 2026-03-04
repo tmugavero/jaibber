@@ -21,21 +21,21 @@ const DESKTOP_DOWNLOADS = [
     platform: "windows" as Platform,
     icon: <Monitor className="w-5 h-5" />,
     label: "Windows",
-    file: "Jaibber_x64-setup.exe",
+    file: "Jaibber_{version}_x64-setup.exe",
     note: "Windows 10+ (64-bit)",
   },
   {
     platform: "mac" as Platform,
     icon: <Apple className="w-5 h-5" />,
     label: "macOS",
-    file: "Jaibber_universal.dmg",
+    file: "Jaibber_{version}_x64.dmg",
     note: "macOS 11+ (Intel & Apple Silicon)",
   },
   {
     platform: "linux" as Platform,
     icon: <Terminal className="w-5 h-5" />,
     label: "Linux",
-    file: "Jaibber_amd64.AppImage",
+    file: "Jaibber_{version}_amd64.AppImage",
     note: "AppImage (64-bit)",
   },
 ];
@@ -63,12 +63,35 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+interface ReleaseAsset {
+  name: string;
+  browser_download_url: string;
+}
+
 export function DownloadsPage() {
   const [platform, setPlatform] = useState<Platform>("unknown");
+  const [releaseAssets, setReleaseAssets] = useState<ReleaseAsset[]>([]);
+  const [releaseVersion, setReleaseVersion] = useState<string | null>(null);
 
   useEffect(() => {
     setPlatform(detectPlatform());
+    // Fetch latest release assets from GitHub API
+    fetch("https://api.github.com/repos/tmugavero/jaibber/releases/latest")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.assets) setReleaseAssets(data.assets);
+        if (data.tag_name) setReleaseVersion(data.tag_name.replace(/^v/, ""));
+      })
+      .catch(() => {});
   }, []);
+
+  // Resolve direct download URL for each platform
+  const getDownloadUrl = (filePattern: string): string => {
+    if (!releaseVersion || releaseAssets.length === 0) return GITHUB_RELEASES_URL;
+    const fileName = filePattern.replace("{version}", releaseVersion);
+    const asset = releaseAssets.find((a) => a.name === fileName);
+    return asset?.browser_download_url ?? GITHUB_RELEASES_URL;
+  };
 
   // Sort so detected platform comes first
   const sortedDownloads = [...DESKTOP_DOWNLOADS].sort((a, b) => {
@@ -102,7 +125,7 @@ export function DownloadsPage() {
             {sortedDownloads.map((d) => (
               <a
                 key={d.platform}
-                href={GITHUB_RELEASES_URL}
+                href={getDownloadUrl(d.file)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={`bg-card border rounded-xl p-6 flex flex-col items-center gap-3 hover:border-primary/50 transition-colors ${
@@ -118,7 +141,7 @@ export function DownloadsPage() {
                 <div className="text-xs text-muted-foreground text-center">{d.note}</div>
                 <div className="flex items-center gap-2 mt-2 text-sm text-primary font-semibold">
                   <Download className="w-4 h-4" />
-                  Download
+                  Download{releaseVersion ? ` v${releaseVersion}` : ""}
                 </div>
                 {d.platform === platform && (
                   <div className="text-[10px] text-primary font-medium uppercase tracking-wider">

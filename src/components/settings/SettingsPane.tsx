@@ -31,9 +31,9 @@ const NAV_ITEMS: NavItem[] = [
   { id: "security", label: "Security" },
   { id: "projects", label: "Projects" },
   { id: "organization", label: "Organization" },
-  { id: "api-keys", label: "API Keys", adminOnly: true },
-  { id: "billing", label: "Billing", adminOnly: true },
-  { id: "analytics", label: "Analytics", adminOnly: true },
+  { id: "api-keys", label: "API Keys" },
+  { id: "billing", label: "Billing" },
+  { id: "analytics", label: "Analytics" },
 ];
 
 const VALID_SECTIONS: Set<string> = new Set(NAV_ITEMS.map((i) => i.id));
@@ -153,6 +153,39 @@ export function SettingsPane({ onClose, initialSection, onSectionChange }: Props
   };
 
   const renderContent = () => {
+    const adminSections: Section[] = ["api-keys", "billing", "analytics"];
+    if (adminSections.includes(activeSection) && !canAccessAdmin) {
+      return (
+        <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center text-muted-foreground">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0110 0v4" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-base font-semibold text-foreground mb-1">
+              {activeOrg ? "Admin access required" : "Create an organization"}
+            </h3>
+            <p className="text-sm text-muted-foreground max-w-sm">
+              {activeOrg
+                ? "You need to be an admin or owner of your organization to access this section."
+                : "Create or join an organization to access API Keys, Billing, and Analytics."
+              }
+            </p>
+          </div>
+          {!activeOrg && (
+            <button
+              onClick={() => { setActiveSection("organization"); onSectionChange?.("organization"); }}
+              className="bg-primary text-primary-foreground rounded-lg px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-all"
+            >
+              Go to Organization
+            </button>
+          )}
+        </div>
+      );
+    }
+
     switch (activeSection) {
       case "general": return <GeneralSection />;
       case "security": return <SecuritySection />;

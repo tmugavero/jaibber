@@ -41,6 +41,7 @@ export function AppShell() {
   const [view, setView] = useState<AppView>(initial.view);
   const [settingsSection, setSettingsSection] = useState<string | null>(initial.settingsSection);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [selectKey, setSelectKey] = useState(0);
   const isMobile = useIsMobile();
   const contactCount = useContactStore((s) => Object.keys(s.contacts).length);
   const hasNoProjects = contactCount === 0;
@@ -87,6 +88,7 @@ export function AppShell() {
   // On mobile, selecting a contact hides the sidebar
   const handleSelectContact = (id: string) => {
     setActiveContactId(id);
+    setSelectKey((k) => k + 1);
     navigate("main", id);
     if (isMobile) setShowSidebar(false);
   };
@@ -114,7 +116,7 @@ export function AppShell() {
   // Determine what to show in the main content area
   const renderContent = (onBack?: () => void) => {
     if (activeContactId) {
-      return <ChatWindow contactId={activeContactId} onBack={onBack} />;
+      return <ChatWindow contactId={activeContactId} onBack={onBack} selectKey={selectKey} />;
     }
     if (hasNoProjects) {
       return <WelcomeGuide onProjectCreated={handleProjectCreated} />;

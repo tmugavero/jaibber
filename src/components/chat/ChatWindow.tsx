@@ -23,9 +23,10 @@ interface ProjectMember {
 interface Props {
   contactId: string;
   onBack?: () => void;
+  selectKey?: number;
 }
 
-export function ChatWindow({ contactId, onBack }: Props) {
+export function ChatWindow({ contactId, onBack, selectKey }: Props) {
   // Never use `?? []` inline in selector — creates new array ref every render → infinite loop
   const messages = useChatStore((s) => s.messages[contactId]);
   const contact = useContactStore((s) => s.contacts[contactId]);
@@ -40,6 +41,7 @@ export function ChatWindow({ contactId, onBack }: Props) {
   const [addMemberMsg, setAddMemberMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [copiedProjectId, setCopiedProjectId] = useState(false);
+  const [showQuickInvite, setShowQuickInvite] = useState(false);
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("auto");
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [activeTab, setActiveTab] = useState<"chat" | "tasks">("chat");
@@ -47,15 +49,33 @@ export function ChatWindow({ contactId, onBack }: Props) {
 
   const msgCount = messages?.length ?? 0;
 
-  // Reset tab when switching projects
-  useEffect(() => { setActiveTab("chat"); }, [contactId]);
+  // Reset tab when switching projects or re-clicking the same project
+  useEffect(() => { setActiveTab("chat"); }, [contactId, selectKey]);
 
   // Auto-scroll to bottom on new messages and during streaming (chunk appends)
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const lastMsg = messages?.[messages.length - 1];
   const scrollTrigger = lastMsg ? `${lastMsg.id}:${lastMsg.text.length}:${lastMsg.status}` : "";
+  const userScrolledUp = useRef(false);
+
+  // Track whether user has scrolled up
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [scrollTrigger]);
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const handler = () => {
+      const distFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+      userScrolledUp.current = distFromBottom > 100;
+    };
+    container.addEventListener("scroll", handler, { passive: true });
+    return () => container.removeEventListener("scroll", handler);
+  }, []);
+
+  useEffect(() => {
+    // Always scroll on new messages or streaming chunks unless user scrolled up
+    if (!userScrolledUp.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [scrollTrigger, msgCount]);
 
   // Lazy-load server message history when conversation opens
   useEffect(() => {
@@ -219,7 +239,7 @@ export function ChatWindow({ contactId, onBack }: Props) {
               {contact?.isOnline
                 ? agents.length > 0
                   ? `${agents.length} agent${agents.length > 1 ? "s" : ""} online`
-                  : "online"
+                  : "members online"
                 : contact?.lastSeen
                   ? `last seen ${new Date(contact.lastSeen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
                   : "offline"}
@@ -249,6 +269,22 @@ export function ChatWindow({ contactId, onBack }: Props) {
             </button>
           </div>
 
+          {isAdmin && (
+            <button
+              onClick={() => setShowQuickInvite(!showQuickInvite)}
+              className={`text-xs transition-colors px-2 py-1 rounded ${
+                showQuickInvite ? "text-primary" : "text-muted-foreground hover:text-foreground"
+              }`}
+              title="Invite member"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2" />
+                <circle cx="8.5" cy="7" r="4" />
+                <line x1="20" y1="8" x2="20" y2="14" />
+                <line x1="23" y1="11" x2="17" y2="11" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={() => setShowInfo(!showInfo)}
             className={`text-xs transition-colors px-2 py-1 rounded ${
@@ -270,6 +306,41 @@ export function ChatWindow({ contactId, onBack }: Props) {
             </button>
           )}
         </div>
+
+        {/* Quick invite bar */}
+        {showQuickInvite && isAdmin && (
+          <div className="px-5 py-2.5 border-t border-border/50 flex items-center gap-2">
+            <input
+              type="text"
+              value={addUsername}
+              onChange={(e) => setAddUsername(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleAddMember(); if (e.key === "Escape") setShowQuickInvite(false); }}
+              placeholder="Invite by username..."
+              autoFocus
+              className="flex-1 bg-muted/40 border border-input rounded-md px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+            />
+            <button
+              onClick={handleAddMember}
+              disabled={addingMember || !addUsername.trim()}
+              className="bg-primary text-primary-foreground rounded-md px-3 py-1.5 text-xs font-medium hover:bg-primary/90 transition-all disabled:opacity-50"
+            >
+              {addingMember ? "..." : "Invite"}
+            </button>
+            <button
+              onClick={() => setShowQuickInvite(false)}
+              className="text-muted-foreground hover:text-foreground transition-colors p-1"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+            {addMemberMsg && (
+              <span className={`text-[10px] ${addMemberMsg.type === "success" ? "text-emerald-500" : "text-destructive"}`}>
+                {addMemberMsg.text}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Collapsible project info panel */}
         {showInfo && (
@@ -409,7 +480,7 @@ export function ChatWindow({ contactId, onBack }: Props) {
       {activeTab === "chat" ? (
         <>
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-0.5">
+          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-0.5">
             {loadingHistory && (
               <div className="text-center text-xs text-muted-foreground py-2 animate-pulse">
                 Loading history...

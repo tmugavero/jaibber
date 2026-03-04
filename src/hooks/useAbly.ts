@@ -329,7 +329,8 @@ function subscribeToProjectChannel(
         }];
       });
       useContactStore.getState().setOnlineAgents(contact.id, agentInfos);
-      useContactStore.getState().setOnline(contact.id, agentInfos.length > 0);
+      // Online if ANY member is present (web users + agents), not just agents
+      useContactStore.getState().setOnline(contact.id, members.length > 0);
     }).catch(() => {});
   };
 
@@ -349,13 +350,11 @@ function subscribeToProjectChannel(
     machineName: localAgents.length > 0 ? useSettingsStore.getState().settings.machineName : undefined,
   }).then(() => syncAgents()).catch(() => {});
 
-  channel.presence.subscribe("enter", (member) => {
-    if (!isAgentMember(member)) return;
+  channel.presence.subscribe("enter", () => {
     syncAgents();
   });
 
-  channel.presence.subscribe("update", (member) => {
-    if (!isAgentMember(member)) return;
+  channel.presence.subscribe("update", () => {
     syncAgents();
   });
 

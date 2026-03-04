@@ -83,7 +83,7 @@ export function CreateTaskForm({ projectId, initialTitle, initialDescription, so
         </div>
         {agents.length > 0 && (
           <div className="flex-1">
-            <label className="text-[10px] text-muted-foreground mb-0.5 block">Assign to</label>
+            <label className="text-[10px] text-muted-foreground mb-0.5 block">Assign to Agent</label>
             <select
               value={assignedAgent}
               onChange={(e) => setAssignedAgent(e.target.value)}
