@@ -455,6 +455,16 @@ function subscribeToProjectChannel(
     const isFromThisConnection = msg.connectionId === ably.connection.id;
 
     if (payload.type === "message") {
+      // Resolve parent message preview if this is a reply
+      let parentMessage: { id: string; senderName: string; text: string } | undefined;
+      if (payload.parentMessageId) {
+        const msgs = useChatStore.getState().messages[convId] ?? [];
+        const parent = msgs.find((m) => m.id === payload.parentMessageId);
+        if (parent) {
+          parentMessage = { id: parent.id, senderName: parent.senderName ?? "Unknown", text: parent.text };
+        }
+      }
+
       // All members see all messages (group chat)
       useChatStore.getState().addMessage({
         id: payload.messageId,
@@ -466,6 +476,8 @@ function subscribeToProjectChannel(
         status: "done",
         executionMode: payload.executionMode,
         attachments: payload.attachments,
+        parentMessageId: payload.parentMessageId,
+        parentMessage,
       });
 
       // Agent response: check if any local agents should respond (skip task notifications)
@@ -706,11 +718,21 @@ export function useAbly() {
 }
 
 /** Send a chat message to a project channel. Returns the local message id. */
-export function sendMessage(projectId: string, text: string, executionMode: ExecutionMode = "auto", attachments?: MessageAttachment[]): string {
+export function sendMessage(projectId: string, text: string, executionMode: ExecutionMode = "auto", attachments?: MessageAttachment[], parentMessageId?: string): string {
   const ably = getAbly();
   const { userId, username } = useAuthStore.getState();
   const contact = useContactStore.getState().contacts[projectId];
   const messageId = uuidv4();
+
+  // Resolve parent message preview for display
+  let parentMessage: { id: string; senderName: string; text: string } | undefined;
+  if (parentMessageId) {
+    const msgs = useChatStore.getState().messages[projectId] ?? [];
+    const parent = msgs.find((m) => m.id === parentMessageId);
+    if (parent) {
+      parentMessage = { id: parent.id, senderName: parent.senderName ?? "Unknown", text: parent.text };
+    }
+  }
 
   useChatStore.getState().addMessage({
     id: messageId,
@@ -722,6 +744,8 @@ export function sendMessage(projectId: string, text: string, executionMode: Exec
     status: "sending",
     executionMode,
     attachments,
+    parentMessageId,
+    parentMessage,
   });
 
   if (ably && contact && userId && username) {
@@ -735,6 +759,7 @@ export function sendMessage(projectId: string, text: string, executionMode: Exec
       type: "message",
       executionMode,
       attachments,
+      parentMessageId,
     } satisfies AblyMessage).then(() => {
       useChatStore.getState().updateStatus(projectId, messageId, "sent");
 
@@ -748,6 +773,7 @@ export function sendMessage(projectId: string, text: string, executionMode: Exec
           senderName: username,
           type: "message",
           text,
+          parentMessageId,
         });
       }
     }).catch(() => {

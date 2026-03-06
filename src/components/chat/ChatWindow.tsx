@@ -42,10 +42,13 @@ export function ChatWindow({ contactId, onBack, selectKey }: Props) {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [copiedProjectId, setCopiedProjectId] = useState(false);
   const [showQuickInvite, setShowQuickInvite] = useState(false);
+  const [showConnectSnippet, setShowConnectSnippet] = useState(false);
+  const [copiedSnippet, setCopiedSnippet] = useState(false);
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("auto");
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [activeTab, setActiveTab] = useState<"chat" | "tasks">("chat");
   const [createFromMessage, setCreateFromMessage] = useState<{ title: string; description: string; sourceMessageId: string } | null>(null);
+  const [replyingTo, setReplyingTo] = useState<{ id: string; senderName: string; text: string } | null>(null);
 
   const msgCount = messages?.length ?? 0;
 
@@ -158,7 +161,8 @@ export function ChatWindow({ contactId, onBack, selectKey }: Props) {
   };
 
   const handleSend = (text: string, attachments?: MessageAttachment[]) => {
-    const messageId = sendMessage(contactId, text, executionMode, attachments);
+    const messageId = sendMessage(contactId, text, executionMode, attachments, replyingTo?.id);
+    setReplyingTo(null);
 
     // Fire-and-forget: link attachment records to the message on the server
     if (attachments?.length) {
@@ -404,6 +408,36 @@ export function ChatWindow({ contactId, onBack, selectKey }: Props) {
               )}
             </div>
 
+            {/* Connect Agent snippet */}
+            {isAdmin && (
+              <div>
+                <button
+                  onClick={() => setShowConnectSnippet(!showConnectSnippet)}
+                  className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <svg
+                    width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    className={`transition-transform ${showConnectSnippet ? "rotate-90" : ""}`}
+                  >
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                  Connect Headless Agent
+                </button>
+                {showConnectSnippet && (
+                  <ConnectAgentSnippet
+                    projectId={contactId}
+                    projectName={contact?.name ?? ""}
+                    copied={copiedSnippet}
+                    onCopy={() => {
+                      setCopiedSnippet(true);
+                      setTimeout(() => setCopiedSnippet(false), 2000);
+                    }}
+                  />
+                )}
+              </div>
+            )}
+
             {/* Project members */}
             <div>
               <div className="text-xs font-medium text-muted-foreground mb-1.5">
@@ -492,7 +526,12 @@ export function ChatWindow({ contactId, onBack, selectKey }: Props) {
               </div>
             )}
             {messages?.map((msg) => (
-              <MessageBubble key={msg.id} message={msg} onCreateTask={handleCreateTask} />
+              <MessageBubble
+                key={msg.id}
+                message={msg}
+                onCreateTask={handleCreateTask}
+                onReply={(m) => setReplyingTo({ id: m.id, senderName: m.senderName ?? "Unknown", text: m.text })}
+              />
             ))}
             <div ref={bottomRef} />
           </div>
@@ -504,7 +543,7 @@ export function ChatWindow({ contactId, onBack, selectKey }: Props) {
             </div>
           ) : (
             <>
-              <MessageInput onSend={handleSend} disabled={hasStreamingFromThem} agents={agents} projectId={contactId} />
+              <MessageInput onSend={handleSend} disabled={hasStreamingFromThem} agents={agents} projectId={contactId} replyingTo={replyingTo} onCancelReply={() => setReplyingTo(null)} />
               {/* Plan / Auto mode toggle — below input, like Claude Code */}
               <div className="flex items-center pb-2 pt-0" style={{ paddingLeft: "3.75rem" }}>
                 <div className="flex bg-muted/40 rounded-lg p-0.5 text-[11px]">
@@ -550,6 +589,64 @@ export function ChatWindow({ contactId, onBack, selectKey }: Props) {
         title="Clear chat history"
         description="Clear chat history for this project?"
       />
+    </div>
+  );
+}
+
+function ConnectAgentSnippet({
+  projectId,
+  projectName,
+  copied,
+  onCopy,
+}: {
+  projectId: string;
+  projectName: string;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  const suggestedName = projectName
+    ? projectName.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-]/g, "").slice(0, 20) + "-agent"
+    : "MyAgent";
+
+  const snippet = `npx @jaibber/sdk \\
+  --username YOUR_USERNAME --password YOUR_PASSWORD \\
+  --agent-name "${suggestedName}" \\
+  --anthropic-key YOUR_API_KEY \\
+  --projects "${projectId}"`;
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(snippet);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = snippet;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    onCopy();
+  };
+
+  return (
+    <div className="mt-2 ml-3">
+      <p className="text-[11px] text-muted-foreground mb-1.5">
+        Run this on any machine to connect a headless AI agent to this project:
+      </p>
+      <div className="relative">
+        <pre className="bg-muted/50 border border-border/50 rounded-lg p-2.5 text-[10px] font-mono text-foreground overflow-x-auto whitespace-pre-wrap break-all select-all">
+          {snippet}
+        </pre>
+        <button
+          onClick={handleCopy}
+          className="absolute top-1.5 right-1.5 text-[10px] text-primary hover:text-primary/80 transition-colors bg-background/80 rounded px-1.5 py-0.5"
+        >
+          {copied ? "Copied!" : "Copy"}
+        </button>
+      </div>
+      <p className="text-[10px] text-muted-foreground/70 mt-1.5">
+        Replace <span className="font-mono">YOUR_USERNAME</span>, <span className="font-mono">YOUR_PASSWORD</span>, and <span className="font-mono">YOUR_API_KEY</span> with your credentials. Supports <span className="font-mono">--openai-key</span>, <span className="font-mono">--google-key</span>, or <span className="font-mono">--claude-cli</span> instead.
+      </p>
     </div>
   );
 }

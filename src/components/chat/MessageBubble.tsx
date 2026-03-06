@@ -7,6 +7,7 @@ import { TypingIndicator } from "./TypingIndicator";
 interface Props {
   message: Message;
   onCreateTask?: (message: Message) => void;
+  onReply?: (message: Message) => void;
 }
 
 function formatTime(iso: string) {
@@ -90,7 +91,7 @@ function renderAttachments(attachments: MessageAttachment[] | undefined, isMe: b
   );
 }
 
-export function MessageBubble({ message, onCreateTask }: Props) {
+export function MessageBubble({ message, onCreateTask, onReply }: Props) {
   const isMe = message.sender === "me";
   const isStreaming = message.status === "streaming";
   const isDone = message.status === "done";
@@ -105,6 +106,20 @@ export function MessageBubble({ message, onCreateTask }: Props) {
             : "bg-card border border-border text-card-foreground rounded-bl-sm"
         )}
       >
+        {/* Quoted parent message preview */}
+        {message.parentMessage && (
+          <div
+            className={cn(
+              "border-l-2 pl-2 mb-2 text-[11px] leading-snug",
+              isMe
+                ? "border-primary-foreground/40 text-primary-foreground/70"
+                : "border-primary/40 text-muted-foreground"
+            )}
+          >
+            <span className="font-semibold">{message.parentMessage.senderName}</span>
+            <div className="truncate max-w-[250px]">{message.parentMessage.text}</div>
+          </div>
+        )}
         {isStreaming && !message.text ? (
           <TypingIndicator />
         ) : (
@@ -134,16 +149,32 @@ export function MessageBubble({ message, onCreateTask }: Props) {
               {message.status === "sending" ? "·" : message.status === "error" ? "✗" : "✓"}
             </span>
           )}
-          {onCreateTask && isDone && message.text && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onCreateTask(message); }}
-              className="ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-primary"
-              title="Create task from message"
-            >
-              <svg width="10" height="10" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M3.94993 2.95002L3.94993 4.49998C3.94993 4.74851 3.74846 4.94998 3.49993 4.94998C3.2514 4.94998 3.04993 4.74851 3.04993 4.49998V2.50004C3.04993 2.45246 3.05731 2.40661 3.07099 2.36357C3.12878 2.18175 3.29897 2.05002 3.49993 2.05002H11.4999C11.6553 2.05002 11.7922 2.12872 11.8731 2.24842C11.9216 2.32024 11.9499 2.40683 11.9499 2.50002L11.9499 4.49998C11.9499 4.74851 11.7485 4.94998 11.4999 4.94998C11.2514 4.94998 11.0499 4.74851 11.0499 4.49998V2.95002H3.94993ZM7.49993 5.52487C7.63261 5.52487 7.75991 5.57753 7.85364 5.67126L10.3536 8.17124C10.5489 8.3665 10.5489 8.68308 10.3536 8.87834C10.1584 9.07361 9.84178 9.07361 9.64652 8.87834L7.94993 7.18177V12.5C7.94993 12.7485 7.74846 12.95 7.49993 12.95C7.2514 12.95 7.04993 12.7485 7.04993 12.5V7.18177L5.35334 8.87834C5.15808 9.07361 4.84149 9.07361 4.64623 8.87834C4.45097 8.68308 4.45097 8.3665 4.64623 8.17124L7.14623 5.67126C7.23995 5.57753 7.36726 5.52487 7.49993 5.52487Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"/>
-              </svg>
-            </button>
+          {isDone && message.text && (
+            <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {onReply && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onReply(message); }}
+                  className="text-muted-foreground hover:text-primary mr-0.5"
+                  title="Reply"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9,17 4,12 9,7" />
+                    <path d="M20 18v-2a4 4 0 00-4-4H4" />
+                  </svg>
+                </button>
+              )}
+              {onCreateTask && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onCreateTask(message); }}
+                  className="text-muted-foreground hover:text-primary"
+                  title="Create task from message"
+                >
+                  <svg width="10" height="10" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3.94993 2.95002L3.94993 4.49998C3.94993 4.74851 3.74846 4.94998 3.49993 4.94998C3.2514 4.94998 3.04993 4.74851 3.04993 4.49998V2.50004C3.04993 2.45246 3.05731 2.40661 3.07099 2.36357C3.12878 2.18175 3.29897 2.05002 3.49993 2.05002H11.4999C11.6553 2.05002 11.7922 2.12872 11.8731 2.24842C11.9216 2.32024 11.9499 2.40683 11.9499 2.50002L11.9499 4.49998C11.9499 4.74851 11.7485 4.94998 11.4999 4.94998C11.2514 4.94998 11.0499 4.74851 11.0499 4.49998V2.95002H3.94993ZM7.49993 5.52487C7.63261 5.52487 7.75991 5.57753 7.85364 5.67126L10.3536 8.17124C10.5489 8.3665 10.5489 8.68308 10.3536 8.87834C10.1584 9.07361 9.84178 9.07361 9.64652 8.87834L7.94993 7.18177V12.5C7.94993 12.7485 7.74846 12.95 7.49993 12.95C7.2514 12.95 7.04993 12.7485 7.04993 12.5V7.18177L5.35334 8.87834C5.15808 9.07361 4.84149 9.07361 4.64623 8.87834C4.45097 8.68308 4.45097 8.3665 4.64623 8.17124L7.14623 5.67126C7.23995 5.57753 7.36726 5.52487 7.49993 5.52487Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"/>
+                  </svg>
+                </button>
+              )}
+            </span>
           )}
         </div>
       </div>

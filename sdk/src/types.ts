@@ -32,6 +32,7 @@ export interface AblyMessage {
   respondingChain?: string[];
   isTaskNotification?: boolean;
   attachments?: MessageAttachment[];
+  parentMessageId?: string;
 }
 
 // ── Task types (must match frontend src/types/task.ts) ──────────────
@@ -151,6 +152,7 @@ export interface ServerMessage {
   senderName: string;
   type: "message" | "response" | "error";
   text: string;
+  parentMessageId?: string;
   createdAt: string;
 }
 
@@ -162,6 +164,7 @@ export interface PersistMessagePayload {
   senderName: string;
   type: "message" | "response" | "error";
   text: string;
+  parentMessageId?: string;
 }
 
 // ── History entry (internal) ────────────────────────────────────────

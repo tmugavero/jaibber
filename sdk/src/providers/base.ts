@@ -18,3 +18,26 @@ export interface AnthropicProviderOptions {
   /** Max tokens (default: 8192) */
   maxTokens?: number;
 }
+
+export interface OpenAIProviderOptions {
+  /** OpenAI API key (sk-...) */
+  apiKey: string;
+  /** Model ID (default: "gpt-4o") */
+  model?: string;
+  /** Max tokens (default: 8192) */
+  maxTokens?: number;
+}
+
+export interface GoogleProviderOptions {
+  /** Google AI API key (AIza...) */
+  apiKey: string;
+  /** Model ID (default: "gemini-2.0-flash") */
+  model?: string;
+  /** Max tokens (default: 8192) */
+  maxTokens?: number;
+}
+
+export interface ClaudeCLIProviderOptions {
+  /** Working directory for Claude CLI (default: cwd) */
+  projectDir?: string;
+}

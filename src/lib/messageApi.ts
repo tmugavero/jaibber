@@ -8,6 +8,7 @@ interface ServerMessage {
   senderName: string;
   type: "message" | "response" | "error" | "system";
   text: string;
+  parentMessageId?: string | null;
   metadata: Record<string, unknown> | null;
   createdAt: string;
 }
@@ -30,6 +31,7 @@ function mapServerMessage(msg: ServerMessage, currentUserId: string): Message {
     text: msg.text,
     timestamp: msg.createdAt,
     status: msg.type === "error" ? "error" : "done",
+    parentMessageId: msg.parentMessageId ?? undefined,
   };
 }
 
@@ -75,6 +77,7 @@ export function persistMessage(
     senderName: string;
     type: "message" | "response" | "error";
     text: string;
+    parentMessageId?: string;
   },
 ): void {
   fetch(`${apiBaseUrl}/api/projects/${projectId}/messages`, {
@@ -89,6 +92,7 @@ export function persistMessage(
       senderName: message.senderName,
       type: message.type,
       text: message.text,
+      parentMessageId: message.parentMessageId,
     }),
   }).catch(() => {});
 }

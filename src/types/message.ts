@@ -12,6 +12,8 @@ export interface Message {
   status: "sending" | "sent" | "streaming" | "done" | "error";
   executionMode?: ExecutionMode;  // "auto" or "plan" — affects agent behavior
   attachments?: MessageAttachment[];  // file attachments on this message
+  parentMessageId?: string;  // reply threading
+  parentMessage?: { id: string; senderName: string; text: string };
 }
 
 export interface AblyMessage {
@@ -33,4 +35,6 @@ export interface AblyMessage {
   isTaskNotification?: boolean;
   // File attachments
   attachments?: MessageAttachment[];
+  // Reply threading
+  parentMessageId?: string;
 }

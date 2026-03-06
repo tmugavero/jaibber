@@ -8,11 +8,19 @@ import { useSettingsStore } from "@/stores/settingsStore";
 
 const EmojiPicker = lazy(() => import("emoji-picker-react"));
 
+interface ReplyingTo {
+  id: string;
+  senderName: string;
+  text: string;
+}
+
 interface Props {
   onSend: (text: string, attachments?: MessageAttachment[]) => void;
   disabled?: boolean;
   agents?: AgentInfo[];
   projectId: string;
+  replyingTo?: ReplyingTo | null;
+  onCancelReply?: () => void;
 }
 
 /**
@@ -34,7 +42,7 @@ function getMentionQuery(text: string, cursorPos: number): { query: string; star
 
 let pendingIdCounter = 0;
 
-export function MessageInput({ onSend, disabled, agents = [], projectId }: Props) {
+export function MessageInput({ onSend, disabled, agents = [], projectId, replyingTo, onCancelReply }: Props) {
   const [text, setText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
   const [mentionIndex, setMentionIndex] = useState(0);
@@ -59,6 +67,11 @@ export function MessageInput({ onSend, disabled, agents = [], projectId }: Props
   useEffect(() => {
     setMentionIndex(filteredAgents.length - 1);
   }, [mentionInfo?.query, filteredAgents.length]);
+
+  // Auto-focus when replying to a message
+  useEffect(() => {
+    if (replyingTo) textareaRef.current?.focus();
+  }, [replyingTo]);
 
   // Revoke object URLs on cleanup
   useEffect(() => {
@@ -461,6 +474,24 @@ export function MessageInput({ onSend, disabled, agents = [], projectId }: Props
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Reply preview bar */}
+      {replyingTo && (
+        <div className="flex items-center gap-2 px-3 pt-2 text-xs">
+          <div className="flex-1 border-l-2 border-primary/50 pl-2 min-w-0">
+            <span className="font-semibold text-foreground">{replyingTo.senderName}</span>
+            <div className="text-muted-foreground truncate">{replyingTo.text}</div>
+          </div>
+          <button
+            onClick={onCancelReply}
+            className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors p-1"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
         </div>
       )}
 

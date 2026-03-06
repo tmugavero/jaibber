@@ -47,39 +47,51 @@ REQUIRED:
   --password <pass>         Jaibber account password
   --agent-name <name>       Agent display name (used for @mention routing)
 
+PROVIDER (at least one required — first match wins):
+  --anthropic-key <key>     Anthropic API key (Claude)
+  --openai-key <key>        OpenAI API key (GPT-4o)
+  --google-key <key>        Google AI API key (Gemini)
+  --claude-cli              Use local Claude CLI (no API key needed)
+
 OPTIONAL:
   --register                Create a new account (instead of logging into an existing one)
   --server <url>            Server URL (default: https://api.jaibber.com)
-  --anthropic-key <key>     Anthropic API key — enables built-in Claude provider
   --instructions <text>     System prompt for the agent
   --machine-name <name>     Machine identifier shown in presence
   --projects <id,id,...>    Comma-separated project IDs to join (default: all)
+  --project-dir <path>      Working directory for Claude CLI (default: cwd)
   --help                    Show this help message
 
 EXAMPLES:
-  # Register a new account and start an agent
+  # With Anthropic API key
+  npx @jaibber/sdk \\
+    --username coding-bot --password s3cret \\
+    --agent-name "CodingAgent" \\
+    --anthropic-key sk-ant-api03-...
+
+  # With OpenAI
+  npx @jaibber/sdk \\
+    --username coding-bot --password s3cret \\
+    --agent-name "CodingAgent" \\
+    --openai-key sk-...
+
+  # With local Claude CLI (no API key)
+  npx @jaibber/sdk \\
+    --username coding-bot --password s3cret \\
+    --agent-name "CodingAgent" \\
+    --claude-cli --project-dir /path/to/project
+
+  # Register new account + Gemini
   npx @jaibber/sdk \\
     --register \\
-    --username coding-bot --password s3cret \\
-    --agent-name "CodingAgent" \\
-    --anthropic-key sk-ant-api03-...
-
-  # Login to existing account and start an agent
-  npx @jaibber/sdk \\
-    --username coding-bot --password s3cret \\
-    --agent-name "CodingAgent" \\
-    --anthropic-key sk-ant-api03-...
-
-  # Agent for specific projects with custom instructions
-  npx @jaibber/sdk \\
     --username tester --password p4ss \\
     --agent-name "TestBot" \\
-    --anthropic-key sk-ant-api03-... \\
-    --instructions "You are a QA engineer. Review code for bugs." \\
-    --projects "uuid-1,uuid-2"
+    --google-key AIza...
 
 ENVIRONMENT VARIABLES:
   ANTHROPIC_API_KEY         Alternative to --anthropic-key
+  OPENAI_API_KEY            Alternative to --openai-key
+  GOOGLE_API_KEY            Alternative to --google-key
   JAIBBER_PASSWORD          Alternative to --password
 `);
   process.exit(0);
@@ -94,6 +106,12 @@ const serverUrl =
   args["server"] || "https://api.jaibber.com";
 const anthropicKey =
   args["anthropic-key"] || process.env.ANTHROPIC_API_KEY;
+const openaiKey =
+  args["openai-key"] || process.env.OPENAI_API_KEY;
+const googleKey =
+  args["google-key"] || process.env.GOOGLE_API_KEY;
+const useClaudeCli = args["claude-cli"] === "true";
+const projectDir = args["project-dir"];
 const instructions = args["instructions"];
 const machineName = args["machine-name"];
 const shouldRegister = args["register"] === "true";
@@ -143,12 +161,22 @@ const agent = new JaibberAgent({
   projectIds,
 });
 
+// Auto-detect provider (first wins: anthropic > openai > google > claude-cli)
 if (anthropicKey) {
   agent.useProvider("anthropic", { apiKey: anthropicKey });
-  console.log(`[cli] Using Anthropic provider`);
+  console.log(`[cli] Using Anthropic provider (Claude)`);
+} else if (openaiKey) {
+  agent.useProvider("openai", { apiKey: openaiKey });
+  console.log(`[cli] Using OpenAI provider (GPT-4o)`);
+} else if (googleKey) {
+  agent.useProvider("google", { apiKey: googleKey });
+  console.log(`[cli] Using Google provider (Gemini)`);
+} else if (useClaudeCli) {
+  agent.useProvider("claude-cli", { projectDir });
+  console.log(`[cli] Using Claude CLI provider (local auth)`);
 } else {
   console.log(
-    "[cli] No --anthropic-key provided. Register a message handler in code, or pass --anthropic-key.",
+    "[cli] No provider configured. Pass --anthropic-key, --openai-key, --google-key, or --claude-cli.",
   );
   console.log(
     "[cli] Agent will connect but won't respond to messages without a provider.",

@@ -6,7 +6,15 @@ import { MessageContext, TaskContext } from "./context.js";
 import { mentionsAgent } from "./mentions.js";
 import type { Provider } from "./providers/base.js";
 import { AnthropicProvider } from "./providers/anthropic.js";
-import type { AnthropicProviderOptions } from "./providers/base.js";
+import { OpenAIProvider } from "./providers/openai.js";
+import { GoogleProvider } from "./providers/google.js";
+import { ClaudeCLIProvider } from "./providers/claude-cli.js";
+import type {
+  AnthropicProviderOptions,
+  OpenAIProviderOptions,
+  GoogleProviderOptions,
+  ClaudeCLIProviderOptions,
+} from "./providers/base.js";
 import type {
   AgentConfig,
   AblyMessage,
@@ -162,12 +170,27 @@ export class JaibberAgent extends EventEmitter {
   }
 
   /** Use a built-in LLM provider. */
+  useProvider(name: "anthropic", options: AnthropicProviderOptions): void;
+  useProvider(name: "openai", options: OpenAIProviderOptions): void;
+  useProvider(name: "google", options: GoogleProviderOptions): void;
+  useProvider(name: "claude-cli", options?: ClaudeCLIProviderOptions): void;
   useProvider(
-    name: "anthropic",
-    options: AnthropicProviderOptions,
+    name: "anthropic" | "openai" | "google" | "claude-cli",
+    options?: AnthropicProviderOptions | OpenAIProviderOptions | GoogleProviderOptions | ClaudeCLIProviderOptions,
   ): void {
-    if (name === "anthropic") {
-      this.provider = new AnthropicProvider(options);
+    switch (name) {
+      case "anthropic":
+        this.provider = new AnthropicProvider(options as AnthropicProviderOptions);
+        break;
+      case "openai":
+        this.provider = new OpenAIProvider(options as OpenAIProviderOptions);
+        break;
+      case "google":
+        this.provider = new GoogleProvider(options as GoogleProviderOptions);
+        break;
+      case "claude-cli":
+        this.provider = new ClaudeCLIProvider(options as ClaudeCLIProviderOptions);
+        break;
     }
   }
 
