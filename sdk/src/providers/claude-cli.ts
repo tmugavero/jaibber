@@ -37,7 +37,7 @@ export class ClaudeCLIProvider implements Provider {
     const child = spawn("claude", ["--print", "--dangerously-skip-permissions", fullPrompt], {
       cwd: this.projectDir,
       stdio: ["ignore", "pipe", "pipe"],
-      shell: true,
+      shell: false,
     });
 
     let stderr = "";
