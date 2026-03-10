@@ -10,6 +10,10 @@
 
 import { JaibberAgent } from "./agent.js";
 import { JaibberClient } from "./client.js";
+import { writeFileSync, mkdirSync } from "fs";
+import { execSync } from "child_process";
+import { homedir } from "os";
+import { join } from "path";
 
 // ── Arg parsing (zero-dep) ──────────────────────────────────────────
 
@@ -56,6 +60,7 @@ PROVIDER (at least one required — first match wins):
 OPTIONAL:
   --register                Create a new account (instead of logging into an existing one)
   --create-project <name>   Create a new project and join it (prints project ID on start)
+  --install-service         Install as a systemd user service and start it (Linux only)
   --server <url>            Server URL (default: https://api.jaibber.com)
   --instructions <text>     System prompt for the agent
   --machine-name <name>     Machine identifier shown in presence
@@ -88,6 +93,13 @@ EXAMPLES:
     --agent-name "CodingAgent" \\
     --create-project "my-ubuntu-server" \\
     --claude-cli
+
+  # Install as a persistent background service
+  npx @jaibber/sdk \\
+    --username coding-bot --password s3cret \\
+    --agent-name "CodingAgent" \\
+    --projects abc-123 --claude-cli \\
+    --install-service
 
   # Register new account + Gemini
   npx @jaibber/sdk \\
@@ -124,6 +136,7 @@ const instructions = args["instructions"];
 const machineName = args["machine-name"];
 const shouldRegister = args["register"] === "true";
 const createProjectName = args["create-project"];
+const installService = args["install-service"] === "true";
 const projectIds = args["projects"]
   ? args["projects"].split(",").map((s) => s.trim())
   : undefined;
@@ -179,6 +192,69 @@ if (createProjectName) {
     );
     process.exit(1);
   }
+}
+
+// ── Install systemd user service ─────────────────────────────────────
+
+if (installService) {
+  // Resolve the jaibber-agent binary path
+  const binaryPath = process.execPath; // node
+  const scriptPath = new URL(import.meta.url).pathname;
+
+  // Build the ExecStart args (same flags, minus --install-service)
+  const flags: string[] = [];
+  flags.push(`--username`, username);
+  flags.push(`--password`, password);
+  flags.push(`--agent-name`, agentName);
+  if (resolvedProjectIds?.length) flags.push(`--projects`, resolvedProjectIds.join(","));
+  if (serverUrl !== "https://api.jaibber.com") flags.push(`--server`, serverUrl);
+  if (instructions) flags.push(`--instructions`, instructions);
+  if (machineName) flags.push(`--machine-name`, machineName);
+  if (projectDir) flags.push(`--project-dir`, projectDir);
+  if (useClaudeCli) flags.push(`--claude-cli`);
+  if (anthropicKey) flags.push(`--anthropic-key`, anthropicKey);
+  if (openaiKey) flags.push(`--openai-key`, openaiKey);
+  if (googleKey) flags.push(`--google-key`, googleKey);
+
+  const execStart = `${binaryPath} ${scriptPath} ${flags.map(f => f.includes(" ") ? `"${f}"` : f).join(" ")}`;
+
+  const serviceContent = `[Unit]
+Description=Jaibber Agent (${agentName})
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=${execStart}
+Restart=on-failure
+RestartSec=10
+Environment=HOME=${homedir()}
+
+[Install]
+WantedBy=default.target
+`;
+
+  const serviceDir = join(homedir(), ".config", "systemd", "user");
+  const serviceName = `jaibber-agent.service`;
+  const servicePath = join(serviceDir, serviceName);
+
+  try {
+    mkdirSync(serviceDir, { recursive: true });
+    writeFileSync(servicePath, serviceContent);
+    execSync(`systemctl --user daemon-reload`);
+    execSync(`systemctl --user enable --now ${serviceName}`);
+    console.log(`[cli] Service installed and started.`);
+    console.log(`[cli] Manage with:`);
+    console.log(`[cli]   systemctl --user status jaibber-agent`);
+    console.log(`[cli]   systemctl --user restart jaibber-agent`);
+    console.log(`[cli]   journalctl --user -u jaibber-agent -f`);
+  } catch (err) {
+    console.error(`[cli] Failed to install service: ${err instanceof Error ? err.message : err}`);
+    console.error(`[cli] Service file written to: ${servicePath}`);
+    console.error(`[cli] You can enable it manually: systemctl --user enable --now jaibber-agent`);
+    process.exit(1);
+  }
+  process.exit(0);
 }
 
 // ── Start agent ─────────────────────────────────────────────────────
