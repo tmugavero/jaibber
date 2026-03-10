@@ -33,6 +33,8 @@ export interface AblyMessage {
   isTaskNotification?: boolean;
   attachments?: MessageAttachment[];
   parentMessageId?: string;
+  /** Injected by AblyManager — not on the wire. Used for connection-level self-skip. */
+  _connectionId?: string;
 }
 
 // ── Task types (must match frontend src/types/task.ts) ──────────────

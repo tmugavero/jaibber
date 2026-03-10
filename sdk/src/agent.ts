@@ -200,10 +200,8 @@ export class JaibberAgent extends EventEmitter {
     payload: AblyMessage,
     project: Project,
   ): Promise<void> {
-    const userId = this.client.userId!;
-
-    // Skip own messages
-    if (payload.from === userId) return;
+    // Skip own messages by connection ID (not userId — same account can be both agent and human)
+    if (payload._connectionId && payload._connectionId === this.ablyManager?.connectionId) return;
 
     // Skip task notifications
     if (payload.isTaskNotification) return;

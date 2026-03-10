@@ -1,6 +1,6 @@
 {
   "name": "@jaibber/sdk",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Headless agent SDK for Jaibber — run AI agents without a desktop app",
   "license": "MIT",
   "repository": {

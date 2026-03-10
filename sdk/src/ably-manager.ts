@@ -91,6 +91,9 @@ export class AblyManager {
     const messageHandler = (msg: Ably.Message) => {
       if (!msg.data) return;
       const payload = msg.data as AblyMessage;
+      // Attach the Ably connection ID so the agent can skip its own messages
+      // by connection (not by userId — same user could be both agent and human)
+      payload._connectionId = msg.connectionId ?? undefined;
       onMessage(payload);
     };
 
