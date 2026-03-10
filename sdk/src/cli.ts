@@ -55,6 +55,7 @@ PROVIDER (at least one required — first match wins):
 
 OPTIONAL:
   --register                Create a new account (instead of logging into an existing one)
+  --create-project <name>   Create a new project and join it (prints project ID on start)
   --server <url>            Server URL (default: https://api.jaibber.com)
   --instructions <text>     System prompt for the agent
   --machine-name <name>     Machine identifier shown in presence
@@ -80,6 +81,13 @@ EXAMPLES:
     --username coding-bot --password s3cret \\
     --agent-name "CodingAgent" \\
     --claude-cli --project-dir /path/to/project
+
+  # Create a new project on first run
+  npx @jaibber/sdk \\
+    --username coding-bot --password s3cret \\
+    --agent-name "CodingAgent" \\
+    --create-project "my-ubuntu-server" \\
+    --claude-cli
 
   # Register new account + Gemini
   npx @jaibber/sdk \\
@@ -115,6 +123,7 @@ const projectDir = args["project-dir"];
 const instructions = args["instructions"];
 const machineName = args["machine-name"];
 const shouldRegister = args["register"] === "true";
+const createProjectName = args["create-project"];
 const projectIds = args["projects"]
   ? args["projects"].split(",").map((s) => s.trim())
   : undefined;
@@ -150,6 +159,28 @@ if (shouldRegister) {
   }
 }
 
+// ── Create project if requested ──────────────────────────────────────
+
+let resolvedProjectIds = projectIds;
+
+if (createProjectName) {
+  console.log(`[cli] Creating project "${createProjectName}"...`);
+  const client = new JaibberClient(serverUrl);
+  try {
+    await client.login(username, password);
+    const project = await client.createProject(createProjectName);
+    console.log(`[cli] Project created: ${project.name}`);
+    console.log(`[cli] Project ID: ${project.id}`);
+    console.log(`[cli] Share this ID with teammates to join the project.`);
+    resolvedProjectIds = [project.id];
+  } catch (err) {
+    console.error(
+      `[cli] Failed to create project: ${err instanceof Error ? err.message : err}`,
+    );
+    process.exit(1);
+  }
+}
+
 // ── Start agent ─────────────────────────────────────────────────────
 
 const agent = new JaibberAgent({
@@ -158,7 +189,7 @@ const agent = new JaibberAgent({
   agentName,
   agentInstructions: instructions,
   machineName,
-  projectIds,
+  projectIds: resolvedProjectIds,
 });
 
 // Auto-detect provider (first wins: anthropic > openai > google > claude-cli)

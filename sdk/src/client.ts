@@ -120,6 +120,36 @@ export class JaibberClient {
     }));
   }
 
+  /** POST /api/projects — create a new project, returns it. */
+  async createProject(name: string, description?: string): Promise<Project> {
+    const res = await fetch(`${this.serverUrl}/api/projects`, {
+      method: "POST",
+      headers: this.authHeaders(),
+      body: JSON.stringify({ name, description }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to create project (${res.status}): ${text}`);
+    }
+
+    const data = (await res.json()) as {
+      id: string;
+      name: string;
+      description: string | null;
+      ablyChannelName: string;
+      role: string;
+    };
+
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description,
+      ablyChannelName: data.ablyChannelName,
+      role: data.role,
+    };
+  }
+
   // ── Ably token ──────────────────────────────────────────────────────
 
   /** POST /api/ably/token — get scoped Ably TokenRequest. */
