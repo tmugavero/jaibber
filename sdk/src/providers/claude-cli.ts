@@ -34,11 +34,15 @@ export class ClaudeCLIProvider implements Provider {
     }
     fullPrompt += prompt;
 
-    const child = spawn("claude", ["--print", "--dangerously-skip-permissions", fullPrompt], {
+    const child = spawn("claude", ["--print", "--dangerously-skip-permissions"], {
       cwd: this.projectDir,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
       shell: false,
     });
+
+    // Write prompt to stdin — avoids all shell quoting/escaping issues
+    child.stdin!.write(fullPrompt);
+    child.stdin!.end();
 
     let stderr = "";
     child.stderr?.on("data", (chunk: Buffer) => {
