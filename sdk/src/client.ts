@@ -134,19 +134,20 @@ export class JaibberClient {
     }
 
     const data = (await res.json()) as {
-      id: string;
-      name: string;
-      description: string | null;
-      ablyChannelName: string;
-      role: string;
+      project: {
+        id: string;
+        name: string;
+        description: string | null;
+        ablyChannelName: string;
+      };
     };
 
     return {
-      id: data.id,
-      name: data.name,
-      description: data.description,
-      ablyChannelName: data.ablyChannelName,
-      role: data.role,
+      id: data.project.id,
+      name: data.project.name,
+      description: data.project.description,
+      ablyChannelName: data.project.ablyChannelName,
+      role: "admin",
     };
   }
 
