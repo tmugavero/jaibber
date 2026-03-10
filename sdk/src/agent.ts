@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { JaibberClient } from "./client.js";
 import { AblyManager, type AgentPresenceData } from "./ably-manager.js";
 import { MessageContext, TaskContext } from "./context.js";
-import { mentionsAgent } from "./mentions.js";
+import { mentionsAgent, parseMentions } from "./mentions.js";
 import type { Provider } from "./providers/base.js";
 import { AnthropicProvider } from "./providers/anthropic.js";
 import { OpenAIProvider } from "./providers/openai.js";
@@ -255,8 +255,10 @@ export class JaibberAgent extends EventEmitter {
     // Chain deduplication — already responded
     if (chain.includes(this.config.agentName.toLowerCase())) return false;
 
-    // @mention check
-    if (!mentionsAgent(text, this.config.agentName)) return false;
+    // @mention routing: if message has mentions, only respond if this agent is mentioned.
+    // If no mentions at all, respond (broadcast to all agents).
+    const mentions = parseMentions(text);
+    if (mentions.length > 0 && !mentionsAgent(text, this.config.agentName)) return false;
 
     return true;
   }

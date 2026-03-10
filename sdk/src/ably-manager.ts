@@ -44,7 +44,6 @@ export class AblyManager {
       });
 
       this.ably.connection.once("connected", () => {
-        console.log("[sdk] Ably connected");
         resolve();
       });
 
@@ -156,6 +155,5 @@ export class AblyManager {
 
     this.channels.clear();
     this.presenceChannel = null;
-    console.log("[sdk] Ably disconnected");
   }
 }
