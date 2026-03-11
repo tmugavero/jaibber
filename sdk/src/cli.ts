@@ -238,21 +238,44 @@ WantedBy=default.target
   const serviceName = `jaibber-agent.service`;
   const servicePath = join(serviceDir, serviceName);
 
+  mkdirSync(serviceDir, { recursive: true });
+  writeFileSync(servicePath, serviceContent);
+
+  // Try systemd user service first; fall back to crontab if dbus unavailable
   try {
-    mkdirSync(serviceDir, { recursive: true });
-    writeFileSync(servicePath, serviceContent);
-    execSync(`systemctl --user daemon-reload`);
-    execSync(`systemctl --user enable --now ${serviceName}`);
-    console.log(`[cli] Service installed and started.`);
-    console.log(`[cli] Manage with:`);
+    execSync(`systemctl --user daemon-reload`, { stdio: "ignore" });
+    execSync(`systemctl --user enable --now ${serviceName}`, { stdio: "ignore" });
+    console.log(`[cli] Service installed and started (systemd).`);
     console.log(`[cli]   systemctl --user status jaibber-agent`);
     console.log(`[cli]   systemctl --user restart jaibber-agent`);
     console.log(`[cli]   journalctl --user -u jaibber-agent -f`);
-  } catch (err) {
-    console.error(`[cli] Failed to install service: ${err instanceof Error ? err.message : err}`);
-    console.error(`[cli] Service file written to: ${servicePath}`);
-    console.error(`[cli] You can enable it manually: systemctl --user enable --now jaibber-agent`);
-    process.exit(1);
+  } catch {
+    // systemd user bus unavailable (no linger) — fall back to crontab @reboot
+    const cronLine = `@reboot ${execStart} >> ${homedir()}/jaibber-agent.log 2>&1`;
+    try {
+      // Read existing crontab, remove any old jaibber-agent line, add new one
+      let existing = "";
+      try { existing = execSync("crontab -l 2>/dev/null").toString(); } catch { /* empty crontab */ }
+      const filtered = existing.split("\n").filter(l => !l.includes("jaibber-agent")).join("\n").trimEnd();
+      const newCrontab = (filtered ? filtered + "\n" : "") + cronLine + "\n";
+      execSync(`echo ${JSON.stringify(newCrontab)} | crontab -`);
+      console.log(`[cli] Service installed via crontab (starts on reboot).`);
+      console.log(`[cli]   View log: tail -f ~/jaibber-agent.log`);
+      console.log(`[cli]   Remove:   crontab -e  (delete the jaibber-agent line)`);
+      console.log(`[cli] Tip: run "sudo loginctl enable-linger ${process.env.USER || "ubuntu"}" to switch to systemd for better reliability.`);
+      // Start it now in the background
+      const { spawn: spawnBg } = await import("child_process");
+      spawnBg(binaryPath, [scriptPath, ...flags], {
+        detached: true,
+        stdio: ["ignore", "ignore", "ignore"],
+      }).unref();
+      console.log(`[cli] Agent started in background.`);
+    } catch (cronErr) {
+      console.error(`[cli] Could not install via crontab either: ${cronErr instanceof Error ? cronErr.message : cronErr}`);
+      console.error(`[cli] Service file written to: ${servicePath}`);
+      console.error(`[cli] Run manually: sudo loginctl enable-linger $USER && systemctl --user enable --now jaibber-agent`);
+      process.exit(1);
+    }
   }
   process.exit(0);
 }
