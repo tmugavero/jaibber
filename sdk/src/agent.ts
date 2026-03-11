@@ -203,6 +203,17 @@ export class JaibberAgent extends EventEmitter {
     // Skip own messages by connection ID (not userId — same account can be both agent and human)
     if (payload._connectionId && payload._connectionId === this.ablyManager?.connectionId) return;
 
+    // Handle remote deregister command (admin sends from web UI)
+    if (payload.type === "deregister") {
+      const targetName = payload.agentName?.toLowerCase();
+      if (!targetName || targetName === this.config.agentName.toLowerCase()) {
+        console.log(`[sdk] Received deregister command. Shutting down...`);
+        await this.disconnect();
+        process.exit(0);
+      }
+      return;
+    }
+
     // Skip task notifications
     if (payload.isTaskNotification) return;
 

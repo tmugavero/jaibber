@@ -195,6 +195,23 @@ export function ChatWindow({ contactId, onBack, selectKey }: Props) {
     setTimeout(() => setCopiedProjectId(false), 2000);
   };
 
+  const handleDeregisterAgent = (agentName: string) => {
+    const ably = getAbly();
+    const contact = useContactStore.getState().contacts[contactId];
+    const { userId, username } = useAuthStore.getState();
+    if (!ably || !contact || !userId) return;
+    const channel = ably.channels.get(contact.ablyChannelName);
+    channel.publish("message", {
+      from: userId,
+      fromUsername: username,
+      projectId: contactId,
+      text: "",
+      messageId: crypto.randomUUID(),
+      type: "deregister",
+      agentName,
+    });
+  };
+
   const handleCreateTask = (msg: Message) => {
     const firstLine = msg.text.split("\n")[0].slice(0, 100);
     setCreateFromMessage({
@@ -395,6 +412,15 @@ export function ChatWindow({ contactId, onBack, selectKey }: Props) {
                           <span className="text-xs text-muted-foreground">
                             on {agent.machineName}
                           </span>
+                        )}
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleDeregisterAgent(agent.agentName)}
+                            className="ml-auto text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+                            title="Remove agent"
+                          >
+                            Remove
+                          </button>
                         )}
                       </div>
                       {agent.agentInstructions && (

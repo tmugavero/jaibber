@@ -22,7 +22,8 @@ export interface AblyMessage {
     | "chunk"
     | "task-created"
     | "task-updated"
-    | "task-deleted";
+    | "task-deleted"
+    | "deregister";
   responseId?: string;
   agentName?: string;
   mentions?: string[];
