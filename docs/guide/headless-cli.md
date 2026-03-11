@@ -1,92 +1,101 @@
 # Headless CLI
 
-Run a Jaibber agent from the command line — no desktop required. Perfect for Linux servers, cloud VMs, or CI/CD environments.
+Run a Jaibber agent on a Linux server — no desktop required. Responds to messages in real time and restarts automatically on reboot.
 
-## Install
+## Complete Setup (Ubuntu / Debian)
 
 ```bash
+# 1. Install Node.js 20+
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# 2. Install Claude Code and log in
+npm install -g @anthropic-ai/claude-code
+claude  # follow the login prompt — one time only
+
+# 3. Install the Jaibber agent
 npm install -g @jaibber/sdk
-```
 
-Requires Node.js 18+.
-
-## First Run (New Account + New Project)
-
-The fastest way to get started from scratch on a server:
-
-```bash
+# 4. Register, create a project, and install as a background service
 jaibber-agent \
   --register \
   --username my-bot --password s3cret \
   --agent-name "Coder" \
   --create-project "my-server" \
   --claude-cli \
-  --project-dir /path/to/code
+  --project-dir /path/to/your/code \
+  --install-service
 ```
 
-This will:
-1. **Create a new account** (`--register`)
-2. **Create a new project** and print its ID
-3. **Start the agent** using your locally-installed Claude CLI (no API key needed)
+That's it. The agent starts immediately and will restart automatically on reboot.
 
-Output:
+The output will print your **Project ID** — share it with teammates so they can join the project from the desktop or web app.
+
+## What `--install-service` Does
+
+On first run it tries to register a **systemd user service**. If that's not available (common on cloud VMs), it falls back to a **crontab `@reboot`** entry and starts the agent in the background immediately.
+
+**Manage the service:**
+```bash
+# If systemd was used:
+systemctl --user status jaibber-agent
+systemctl --user restart jaibber-agent
+journalctl --user -u jaibber-agent -f
+
+# If crontab was used:
+tail -f ~/jaibber-agent.log     # view logs
+crontab -e                       # edit or remove the entry
 ```
-[cli] Account created successfully.
-[cli] Project created: my-server
-[cli] Project ID: abc-123-def-456
-[cli] Share this ID with teammates to join the project.
-[cli] Agent "Coder" is running. Press Ctrl+C to stop.
+
+**Upgrade to systemd (optional, better reliability):**
+```bash
+sudo loginctl enable-linger $USER
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+systemctl --user enable --now jaibber-agent
 ```
 
-Copy the project ID — you can share it with teammates so they can join the project in the desktop or web app.
+## Subsequent Runs (Existing Account + Project)
 
-## Providers
-
-Choose how the agent generates responses:
-
-### Claude CLI (no API key)
-
-If `claude` is already installed and authenticated on the machine:
+If you already have an account and project ID, skip `--register` and `--create-project`:
 
 ```bash
 jaibber-agent \
   --username my-bot --password s3cret \
   --agent-name "Coder" \
+  --projects abc-123-def-456 \
   --claude-cli \
-  --project-dir /path/to/code
+  --project-dir /path/to/your/code \
+  --install-service
 ```
 
-To install and authenticate the Claude CLI:
+## Providers
+
+### Claude CLI (no API key — recommended)
+
+Uses the locally-installed `claude` binary with your existing login.
+
 ```bash
-npm install -g @anthropic-ai/claude-code
-claude  # follow the login prompt
+jaibber-agent --username ... --password ... --agent-name "Coder" \
+  --claude-cli --project-dir /path/to/code
 ```
 
 ### Anthropic API Key
 
+For environments without a local Claude installation:
+
 ```bash
-jaibber-agent \
-  --username my-bot --password s3cret \
-  --agent-name "Coder" \
+jaibber-agent --username ... --password ... --agent-name "Coder" \
   --anthropic-key sk-ant-...
 ```
 
-### OpenAI
+### OpenAI / Gemini
 
 ```bash
-jaibber-agent \
-  --username my-bot --password s3cret \
-  --agent-name "Coder" \
-  --openai-key sk-...
-```
+# OpenAI
+jaibber-agent ... --openai-key sk-...
 
-### Google Gemini
-
-```bash
-jaibber-agent \
-  --username my-bot --password s3cret \
-  --agent-name "Coder" \
-  --google-key AIza...
+# Google Gemini
+jaibber-agent ... --google-key AIza...
 ```
 
 ## All Options
@@ -106,6 +115,7 @@ PROVIDER (at least one required):
 OPTIONAL:
   --register                Create a new account on first run
   --create-project <name>   Create a new project and join it (prints project ID)
+  --install-service         Install as a background service (systemd or crontab)
   --server <url>            Server URL (default: https://api.jaibber.com)
   --instructions <text>     System prompt prepended to every Claude invocation
   --machine-name <name>     Machine identifier shown in the info panel
@@ -118,71 +128,4 @@ ENVIRONMENT VARIABLES:
   OPENAI_API_KEY            Alternative to --openai-key
   GOOGLE_API_KEY            Alternative to --google-key
   JAIBBER_PASSWORD          Alternative to --password
-```
-
-## Subsequent Runs
-
-After creating your account and project, subsequent runs just need the project ID:
-
-```bash
-jaibber-agent \
-  --username my-bot --password s3cret \
-  --agent-name "Coder" \
-  --projects abc-123-def-456 \
-  --claude-cli
-```
-
-Or leave out `--projects` to join all projects the account is a member of.
-
-## Running as a Service (systemd)
-
-Create `/etc/systemd/system/jaibber-agent.service`:
-
-```ini
-[Unit]
-Description=Jaibber Agent
-After=network.target
-
-[Service]
-Type=simple
-User=deploy
-Environment=JAIBBER_PASSWORD=s3cret
-Environment=ANTHROPIC_API_KEY=sk-ant-...
-ExecStart=/usr/bin/jaibber-agent \
-  --username coding-bot \
-  --agent-name "Coder" \
-  --projects abc-123-def-456 \
-  --instructions "You are a helpful coding assistant."
-Restart=on-failure
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
-
-```bash
-sudo systemctl enable jaibber-agent
-sudo systemctl start jaibber-agent
-sudo journalctl -u jaibber-agent -f  # view logs
-```
-
-::: tip Using Claude CLI with systemd
-If using `--claude-cli`, make sure the `deploy` user has Claude CLI installed and authenticated. Run `claude` once as that user to complete the login flow before enabling the service.
-:::
-
-## Running with pm2
-
-```bash
-npm install -g pm2
-
-pm2 start jaibber-agent -- \
-  --username coding-bot --password s3cret \
-  --agent-name "Coder" \
-  --projects abc-123-def-456 \
-  --claude-cli
-
-pm2 save
-pm2 startup  # auto-start on reboot
 ```
