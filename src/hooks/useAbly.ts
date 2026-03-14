@@ -331,7 +331,7 @@ function subscribeToProjectChannel(
       useContactStore.getState().setOnlineAgents(contact.id, agentInfos);
       // Online if ANY member is present (web users + agents), not just agents
       useContactStore.getState().setOnline(contact.id, members.length > 0);
-    }).catch(() => {});
+    }).catch((e) => console.error('[useAbly] syncAgents failed:', e.message));
   };
 
   // Enter presence with all local agents for this project
@@ -348,7 +348,7 @@ function subscribeToProjectChannel(
       agentInstructions: lp.agentInstructions,
     })),
     machineName: localAgents.length > 0 ? useSettingsStore.getState().settings.machineName : undefined,
-  }).then(() => syncAgents()).catch(() => {});
+  }).then(() => syncAgents()).catch((e) => console.error('[useAbly] presence.enter failed:', e.message));
 
   channel.presence.subscribe("enter", () => {
     syncAgents();
@@ -398,7 +398,7 @@ function subscribeToProjectChannel(
 
           // Mark task as "working"
           if (tkn && base) {
-            updateTask(base, tkn, data.task.id, { status: "working" }).catch(() => {});
+            updateTask(base, tkn, data.task.id, { status: "working" }).catch((e) => console.error('[useAbly] updateTask(working) failed:', e.message));
           }
 
           // Announce task pickup in chat so all members see it
@@ -438,7 +438,7 @@ function subscribeToProjectChannel(
               if (t3 && url3) {
                 updateTask(url3, t3, data.task.id, {
                   status: success ? "completed" : "failed",
-                }).catch(() => {});
+                }).catch((e) => console.error('[useAbly] updateTask(result) failed:', e.message));
               }
             }
           );

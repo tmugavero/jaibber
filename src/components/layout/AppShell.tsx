@@ -81,7 +81,7 @@ export function AppShell() {
     const { apiBaseUrl } = useSettingsStore.getState().settings;
     const { token } = useAuthStore.getState();
     if (apiBaseUrl && token) {
-      useOrgStore.getState().loadOrgs(apiBaseUrl, token).catch(() => {});
+      useOrgStore.getState().loadOrgs(apiBaseUrl, token).catch((e) => console.error('[AppShell] loadOrgs failed:', e.message));
     }
   }, []);
 

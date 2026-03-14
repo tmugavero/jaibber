@@ -27,7 +27,7 @@ export function BillingPage() {
     if (!apiBaseUrl) return;
     fetchPlans(apiBaseUrl)
       .then(setPlans)
-      .catch(() => {}); // Keep fallback on error
+      .catch((e) => console.error('[BillingPage] fetchPlans failed:', e.message));
   }, [apiBaseUrl]);
 
   // Fetch invoice history
@@ -40,7 +40,7 @@ export function BillingPage() {
     })
       .then((r) => r.json())
       .then((data) => setInvoices(data.invoices ?? []))
-      .catch(() => {})
+      .catch((e) => console.error('[BillingPage] fetchInvoices failed:', e.message))
       .finally(() => setInvoicesLoading(false));
   }, [activeOrg?.id, activeOrg?.plan, apiBaseUrl, token]);
 

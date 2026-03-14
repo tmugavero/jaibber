@@ -158,7 +158,9 @@ pub async fn run_agent_stream(
         let win = window.clone();
         let sys = system_prompt.clone();
         let fp = full_prompt.clone();
-        tokio::spawn(async move {
+        let rid2 = rid.clone();
+        let win2 = win.clone();
+        let handle = tokio::spawn(async move {
             if let Err(e) = crate::openclaw::stream_openclaw(
                 &oc_config, &sys, &fp, &rid, &win,
             ).await {
@@ -167,6 +169,16 @@ pub async fn run_agent_stream(
                     "chunk": "",
                     "done": false,
                     "error": e,
+                }));
+            }
+        });
+        tokio::spawn(async move {
+            if let Err(e) = handle.await {
+                let _ = win2.emit("agent-chunk", serde_json::json!({
+                    "responseId": rid2,
+                    "chunk": "",
+                    "done": true,
+                    "error": format!("Agent task panicked: {e}"),
                 }));
             }
         });
@@ -183,7 +195,9 @@ pub async fn run_agent_stream(
             let prm = prompt.clone();
             let atts = attachments.unwrap_or_default();
             let key = api_key.clone();
-            tokio::spawn(async move {
+            let rid2 = rid.clone();
+            let win2 = win.clone();
+            let handle = tokio::spawn(async move {
                 if let Err(e) = crate::claude_api::stream_claude_api(
                     &key, &sys, &prm, &conv, &atts, &rid, &win,
                 ).await {
@@ -192,6 +206,16 @@ pub async fn run_agent_stream(
                         "chunk": "",
                         "done": false,
                         "error": e,
+                    }));
+                }
+            });
+            tokio::spawn(async move {
+                if let Err(e) = handle.await {
+                    let _ = win2.emit("agent-chunk", serde_json::json!({
+                        "responseId": rid2,
+                        "chunk": "",
+                        "done": true,
+                        "error": format!("Agent task panicked: {e}"),
                     }));
                 }
             });
@@ -231,8 +255,12 @@ pub async fn run_agent_stream(
     let system_prompt_for_retry = system_prompt.clone();
     let project_dir_for_retry = project_dir.clone();
 
+    // Clones for the panic supervisor
+    let rid_supervisor = rid.clone();
+    let win_supervisor = win.clone();
+
     // Spawn a background task to read stream lines and emit chunks
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         use tokio::time::{timeout, Duration};
 
         // Collect stderr in parallel so we can include it in error messages
@@ -384,6 +412,16 @@ pub async fn run_agent_stream(
                     }));
                 }
             }
+        }
+    });
+    tokio::spawn(async move {
+        if let Err(e) = handle.await {
+            let _ = win_supervisor.emit("agent-chunk", serde_json::json!({
+                "responseId": rid_supervisor,
+                "chunk": "",
+                "done": true,
+                "error": format!("Agent task panicked: {e}"),
+            }));
         }
     });
 

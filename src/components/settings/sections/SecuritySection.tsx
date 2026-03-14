@@ -29,7 +29,7 @@ export function SecuritySection() {
     })
       .then((r) => r.json())
       .then((data) => { if (data.email) setEmail(data.email); })
-      .catch(() => {})
+      .catch((e) => console.error('[SecuritySection] fetchEmail failed:', e.message))
       .finally(() => setEmailLoading(false));
   }, [apiBaseUrl, token]);
 

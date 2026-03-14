@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import { storage, saveSettings, isTauri } from "@/lib/platform";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { closeAbly } from "@/lib/ably";
 
 export function GeneralSection() {
   const username = useAuthStore((s) => s.username);
@@ -15,6 +16,7 @@ export function GeneralSection() {
   const [showFallbackKeys, setShowFallbackKeys] = useState(false);
 
   const handleSignOut = async () => {
+    closeAbly();
     useAuthStore.getState().clearAuth();
     await Promise.race([
       storage.set("auth", null).catch(() => {}),
@@ -107,6 +109,7 @@ export function GeneralSection() {
               </button>
               <p className="text-[11px] text-muted-foreground/70 mt-1 ml-5">
                 Used only if your local CLI auth expires. Your authenticated CLI is always used first.
+                Keys are stored locally in plaintext. Use environment variables on headless servers.
               </p>
 
               {showFallbackKeys && (

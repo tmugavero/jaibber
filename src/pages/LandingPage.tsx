@@ -66,7 +66,7 @@ export function LandingPage() {
   const [plans, setPlans] = useState<Plan[]>(FALLBACK_PLANS);
 
   useEffect(() => {
-    fetchPlans(DEFAULT_API).then(setPlans).catch(() => {});
+    fetchPlans(DEFAULT_API).then(setPlans).catch((e) => console.error('[LandingPage] fetchPlans failed:', e.message));
   }, []);
 
   return (

@@ -64,7 +64,7 @@ export function pushRegistration(lp: LocalProject): void {
       customCommand: lp.customCommand || null,
       machineName: machineName || null,
     }),
-  }).catch(() => {});
+  }).catch((e) => console.error('[agentSync] pushRegistration failed:', e.message));
 }
 
 /** Remove a registration from the server (fire-and-forget). */
@@ -81,7 +81,7 @@ export function deleteRegistration(
   fetch(`${apiBaseUrl}/api/agent-registrations?${params}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
-  }).catch(() => {});
+  }).catch((e) => console.error('[agentSync] deleteRegistration failed:', e.message));
 }
 
 /**

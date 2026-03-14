@@ -41,6 +41,8 @@ export class AblyManager {
           }
         },
         clientId: this.userId,
+        disconnectedRetryTimeout: 5_000,   // 5s initial retry on disconnect
+        suspendedRetryTimeout: 30_000,     // 30s retry when suspended
       });
 
       this.ably.connection.once("connected", () => {
@@ -53,6 +55,20 @@ export class AblyManager {
             `Ably connection failed: ${stateChange?.reason?.message ?? "unknown"}`,
           ),
         );
+      });
+
+      // Log reconnection events for observability
+      this.ably.connection.on("disconnected", () => {
+        console.warn("[sdk] Ably disconnected, will retry...");
+      });
+      this.ably.connection.on("suspended", () => {
+        console.warn("[sdk] Ably connection suspended (extended outage)");
+      });
+      this.ably.connection.on("connected", () => {
+        // Only log reconnections (not the initial connect)
+        if (this.channels.size > 0) {
+          console.log("[sdk] Ably reconnected");
+        }
       });
     });
   }

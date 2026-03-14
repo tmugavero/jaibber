@@ -82,7 +82,7 @@ export function DownloadsPage() {
         if (data.assets) setReleaseAssets(data.assets);
         if (data.tag_name) setReleaseVersion(data.tag_name.replace(/^v/, ""));
       })
-      .catch(() => {});
+      .catch((e) => console.error('[DownloadsPage] fetch release failed:', e.message));
   }, []);
 
   // Resolve direct download URL for each platform

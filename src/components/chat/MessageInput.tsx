@@ -42,6 +42,8 @@ function getMentionQuery(text: string, cursorPos: number): { query: string; star
 
 let pendingIdCounter = 0;
 
+const MAX_MESSAGE_LENGTH = 50_000;
+
 export function MessageInput({ onSend, disabled, agents = [], projectId, replyingTo, onCancelReply }: Props) {
   const [text, setText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
@@ -50,6 +52,7 @@ export function MessageInput({ onSend, disabled, agents = [], projectId, replyin
   const [pendingFiles, setPendingFiles] = useState<PendingAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [sendCooldown, setSendCooldown] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const emojiRef = useRef<HTMLDivElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
@@ -140,7 +143,12 @@ export function MessageInput({ onSend, disabled, agents = [], projectId, replyin
     const trimmed = text.trim();
     const hasFiles = pendingFiles.some((f) => f.status !== "error");
     if (!trimmed && !hasFiles) return;
-    if (disabled || uploading) return;
+    if (disabled || uploading || sendCooldown) return;
+    if (trimmed.length > MAX_MESSAGE_LENGTH) return;
+
+    // Rate limit: 300ms cooldown between sends
+    setSendCooldown(true);
+    setTimeout(() => setSendCooldown(false), 300);
 
     let uploadedAttachments: MessageAttachment[] = [];
 
@@ -563,9 +571,17 @@ export function MessageInput({ onSend, disabled, agents = [], projectId, replyin
             (disabled || uploading) && "opacity-50 cursor-not-allowed"
           )}
         />
+        {text.length > MAX_MESSAGE_LENGTH * 0.9 && (
+          <span className={cn(
+            "text-[10px] flex-shrink-0 self-end mb-2.5",
+            text.length > MAX_MESSAGE_LENGTH ? "text-destructive" : "text-muted-foreground",
+          )}>
+            {text.length.toLocaleString()}/{MAX_MESSAGE_LENGTH.toLocaleString()}
+          </span>
+        )}
         <button
           onClick={handleSend}
-          disabled={(!text.trim() && !hasPendingFiles) || disabled || uploading}
+          disabled={(!text.trim() && !hasPendingFiles) || disabled || uploading || sendCooldown || text.length > MAX_MESSAGE_LENGTH}
           className={cn(
             "flex items-center justify-center w-10 h-10 rounded-xl",
             "bg-primary text-primary-foreground",

@@ -94,5 +94,5 @@ export function persistMessage(
       text: message.text,
       parentMessageId: message.parentMessageId,
     }),
-  }).catch(() => {});
+  }).catch((e) => console.error('[persistMessage] Failed:', e.message));
 }

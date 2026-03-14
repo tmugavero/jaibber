@@ -79,7 +79,7 @@ export function linkAttachmentsToMessage(
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({ messageId }),
-    }).catch(() => {});
+    }).catch((e) => console.error('[attachmentApi] linkAttachment failed:', e.message));
   }
 }
 

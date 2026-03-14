@@ -25,6 +25,7 @@ interface AppProps {
 
 function App({ onRequireLogin }: AppProps = {}) {
   const [bootState, setBootState] = useState<BootState>("loading");
+  const [bootWarning, setBootWarning] = useState<string | null>(null);
 
   // Lock body scroll for the full-screen app experience (Tauri always, web /app route)
   useEffect(() => {
@@ -103,13 +104,14 @@ function App({ onRequireLogin }: AppProps = {}) {
         // ── 5. Load contacts (projects) and orgs from server ──────────────
         try {
           await useContactStore.getState().loadFromServer(apiBaseUrl, authData.token);
-        } catch {
-          // Continue — contacts will be empty but user stays logged in
+        } catch (e) {
+          console.error('[App] loadFromServer failed:', e);
+          setBootWarning("Could not load projects from server. Check your connection.");
         }
         try {
           await useOrgStore.getState().loadOrgs(apiBaseUrl, authData.token);
-        } catch {
-          // Continue — orgs will be empty
+        } catch (e) {
+          console.error('[App] loadOrgs failed:', e);
         }
 
         // ── 6. Load persisted local projects (agent machine state) ─────────
@@ -128,7 +130,7 @@ function App({ onRequireLogin }: AppProps = {}) {
 
         // ── 6b. Sync agent registrations with server (non-blocking) ──────
         if (isTauri) {
-          syncRegistrations().catch(() => {});
+          syncRegistrations().catch((e) => console.error('[App] syncRegistrations failed:', e.message));
         }
 
         // ── 7. Load chat history ───────────────────────────────────────────
@@ -170,7 +172,7 @@ function App({ onRequireLogin }: AppProps = {}) {
 
       // Sync agent registrations after login (non-blocking)
       if (isTauri) {
-        syncRegistrations().catch(() => {});
+        syncRegistrations().catch((e) => console.error('[App] syncRegistrations failed:', e.message));
       }
 
       setBootState("app");
@@ -200,7 +202,28 @@ function App({ onRequireLogin }: AppProps = {}) {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
-  return <AppShell />;
+  return (
+    <>
+      {bootWarning && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-amber-500/90 text-black px-4 py-2 text-sm text-center flex items-center justify-center gap-3">
+          <span>{bootWarning}</span>
+          <button
+            onClick={() => window.location.reload()}
+            className="underline font-medium hover:no-underline"
+          >
+            Retry
+          </button>
+          <button
+            onClick={() => setBootWarning(null)}
+            className="ml-2 opacity-70 hover:opacity-100"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+      <AppShell />
+    </>
+  );
 }
 
 export default App;

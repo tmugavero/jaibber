@@ -220,6 +220,12 @@ export class JaibberAgent extends EventEmitter {
     // Only respond to "message" type (and "response" for agent chains)
     if (payload.type !== "message" && payload.type !== "response") return;
 
+    // Reject excessively long messages to prevent agent DOS
+    if (payload.text && payload.text.length > 100_000) {
+      console.warn(`[sdk] Ignoring oversized message (${payload.text.length} chars)`);
+      return;
+    }
+
     // Add to history (for both message and response types)
     this.addToHistory(project.id, {
       sender: payload.isAgentMessage ? "agent" : "user",
