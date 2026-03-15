@@ -72,8 +72,8 @@ If no auth → render LoginScreen.
 - **`error.rs`** — `JaibberError` enum; serialize to string for Tauri IPC; no `From` impl for Tauri store errors — use `.map_err(|e| JaibberError::Other(e.to_string()))`
 - **`commands/settings_commands.rs`** — `get_settings`, `save_settings`; persist via tauri-plugin-store to `jaibber.json`
 - **`commands/process_commands.rs`** — Two commands:
-  - `run_claude(prompt, project_dir)` — one-shot execution, returns full stdout
-  - `run_claude_stream(prompt, project_dir, response_id, system_prompt, conversation_context)` — streaming execution: spawns Claude CLI, reads stdout line-by-line via `tokio::spawn` + `BufReader::lines()`, emits `"claude-chunk"` Tauri events with `{responseId, chunk, done, error}`. Full prompt = system_prompt + conversation_context preamble + user prompt. `got_output` flag: treats process as success if any stdout was produced, regardless of exit code.
+  - `run_agent(prompt, project_dir)` — one-shot execution, returns full stdout
+  - `run_agent_stream(prompt, project_dir, response_id, system_prompt, conversation_context, ..., session_id, continue_session)` — streaming execution: spawns CLI agent, reads stdout line-by-line via `tokio::spawn` + `BufReader::lines()`, emits `"agent-chunk"` Tauri events with `{responseId, chunk, done, error}`. Also emits `"agent-session"` event with `{responseId, sessionId}` when a Claude session ID is detected in stream-json output. Full prompt = system_prompt + conversation_context preamble + user prompt. `got_output` flag: treats process as success if any stdout was produced, regardless of exit code.
 
 Both commands: source full shell env (bashrc/profile/nvm/zshrc) via `bash -c`, add AppData Claude path on Windows, export ANTHROPIC_API_KEY, run `claude --print --dangerously-skip-permissions '{prompt}'` in cwd=projectDir.
 
@@ -98,7 +98,7 @@ If any Rust file calls `.emit()`, it must have `use tauri::Emitter;`.
 - `settingsStore` — anthropicApiKey, machineName, apiBaseUrl; persisted via Rust saveSettings()
 - `contactStore` — projects loaded from server (id → Contact with isOnline, role, ablyChannelName, onlineAgents[])
 - `chatStore` — messages keyed by projectId; supports streaming (appendChunk → markDone), clearConversation
-- `projectStore` — local registered projects (projectId → { projectDir, name, ablyChannelName, agentName, agentInstructions })
+- `projectStore` — local registered projects (projectId → { projectDir, name, ablyChannelName, agentName, agentInstructions, currentSessionId? })
 - `orgStore` — organizations, stats, agents; loaded from server
 
 **Critical rule:** Inside `useEffect` or Ably subscribe callbacks, always call store actions via `useStore.getState().action()` — never destructure from the Zustand hook (stale closure).
@@ -202,7 +202,7 @@ type: "done"      // Legacy — treated same as "response"
 { anthropicApiKey: string|null, machineName: string, apiBaseUrl: string }
 
 // LocalProject
-{ projectId, name, projectDir, ablyChannelName, agentName: string, agentInstructions: string }
+{ projectId, name, projectDir, ablyChannelName, agentName: string, agentInstructions: string, currentSessionId?: string }
 ```
 
 ### Port / Vite Configuration
@@ -297,6 +297,35 @@ Agent-to-agent communication model:
 4. Bots communicate via `POST/GET /api/projects/{id}/messages` — same channels humans use
 5. Humans observe everything in real time and can intervene
 
+### Session Resume (Wave 5)
+
+Claude CLI sessions persist across messages within the same project:
+- `run_agent_stream` accepts `session_id: Option<String>` and `continue_session: Option<bool>`
+- `agent_providers.rs`: `build_stream_cmd()` appends `--resume {id}` when session ID provided; session ID validated as alphanumeric+hyphens to prevent command injection
+- `process_commands.rs`: parses `session_id` from Claude's `stream-json` output; emits `"agent-session"` Tauri event with `{responseId, sessionId}`
+- Frontend: `projectStore.currentSessionId` tracked per project+agent; `useAbly.ts` passes session to `runAgentStream` and captures returned ID
+- "Clear conversation" button also clears `currentSessionId` (forces new session)
+- SDK: `ClaudeCLIProvider` uses `--output-format stream-json`, parses session IDs, `setSessionId()`/`clearSession()`
+
+### Task Chaining (Wave 5)
+
+Agents can hand off work to other agents via structured directives:
+- Server: `parentTaskId` column on tasks; validated (parent must exist + same project); `task.chained` webhook event
+- Frontend: after task completion, agent response parsed for `[HANDOFF: @AgentName "description"]` patterns
+- HANDOFF regex: `/\[HANDOFF:\s*@([a-zA-Z0-9_-]+)\s+"([^"]+)"\]/g` — restricted to valid agent name chars
+- Chain depth limit: `MAX_TASK_CHAIN_DEPTH = 5` — walks parentTaskId ancestry before creating follow-ups
+- SDK: `TaskContext.createFollowUpTask()` auto-sets `parentTaskId` to current task; `JaibberClient.createTask()`
+- `TaskDetailPanel` shows parent task link ("Chained from: ...") and child tasks list
+
+### Agent Templates (Wave 5)
+
+6 preset agent configurations for one-click setup:
+- `src/lib/agentTemplates.ts` — `AGENT_TEMPLATES` array: Code Writer, PR Reviewer, Test Writer, DevOps, Bug Hunter, Architect
+- `TemplateSelector` component in `ProjectsPanel.tsx` — shown in both "Register agent" and "Create project" forms
+- Selecting a template pre-fills agentName and agentInstructions
+- SDK: `sdk/src/templates.ts` (separate copy); CLI `--template {id}` and `--list-templates` flags
+- Templates are static data — no server-side storage
+
 ### Key Patterns to Remember
 
 - `@radix-ui/react-badge` does not exist as a package — use plain styled spans
@@ -313,3 +342,8 @@ Agent-to-agent communication model:
 - Conversation context format: `User: text` / `Assistant (AgentName): text` with "Respond ONLY to the final user message" preamble
 - Ably chunk batching: 200ms timer to avoid rate limits; final `"response"` message contains complete text for remote bubble replacement
 - Agent instructions textarea: `rows={8}`, `resize-y`, supports markdown — content is prepended to every Claude invocation as system prompt
+- Session ID security: always validate as `[a-zA-Z0-9-]+` before interpolating into shell commands (prevent injection)
+- Task chain depth: walk `parentTaskId` ancestry to count depth before creating HANDOFF follow-ups
+- HANDOFF directive format: `[HANDOFF: @AgentName "task description"]` — parsed from agent response text after task completion
+- `ParsedLine` struct in agent_providers.rs: `extract_text_from_line()` returns both text and optional session_id
+- SDK @mention routing: requires explicit `@AgentName` to respond (aligned with frontend); no broadcast on unmentioned messages

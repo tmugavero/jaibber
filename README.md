@@ -31,6 +31,9 @@ Jaibber fills this gap: a purpose-built app with a first-class messaging transpo
 | Conversation continuity (follow-ups) | Yes — context window | No | No | Yes | No |
 | Your own machines & private codebases | Yes | Yes | Yes | No — cloud sandboxes only | Yes |
 | Structured task system | Yes — CRUD + auto-execution | No | No | No | No |
+| Session resume (multi-turn context) | Yes — `--resume` preserves tool state | No | No | Yes | No |
+| Agent-to-agent task handoff | Yes — `[HANDOFF:]` directives | No | No | No | No |
+| Agent templates (one-click setup) | Yes — 6 presets | No | No | No | No |
 | Webhook notifications (HMAC-signed) | Yes — task + message events | No | No | No | No |
 | REST API with scoped API keys | Yes — full CRUD + rate limiting | No | No | No | No |
 | Dedicated desktop + web UI | Yes — Tauri native + browser | No | No — Telegram/Discord | No — browser only | No — web UI |
@@ -61,9 +64,38 @@ Messages travel via [Ably](https://ably.com) WebSocket pub/sub — the same infr
 
 Claude's response streams back in real time — character by character with a live typing indicator, just like receiving a message from a person. The Rust backend reads Claude CLI stdout line-by-line and emits Tauri events; the frontend accumulates chunks locally and batches them to Ably every 200ms to avoid rate limits. Remote viewers see the response build up in real time.
 
-### Conversation Continuity
+### Conversation Continuity & Session Resume
 
-Every Claude invocation includes the last 20 messages of conversation context. Follow-up questions work naturally — "can you explain that differently?" or "now add error handling to that" — because the agent knows what it just said. The context uses User/Assistant labels that Claude natively understands.
+Every Claude invocation includes the last 20 messages of conversation context. Follow-up questions work naturally — "can you explain that differently?" or "now add error handling to that" — because the agent knows what it just said.
+
+Beyond text context, Jaibber supports **full session resume** via `claude --resume`. When enabled, the agent maintains Claude's internal tool use state across messages — it remembers which files it edited, what commands it ran, and its reasoning from prior turns. Session IDs are tracked per project and persist across app restarts. Clearing the conversation starts a fresh session.
+
+### Task Chaining (Agent-to-Agent Handoffs)
+
+Agents can delegate work to other agents automatically. When an agent completes a task, it can include a `[HANDOFF: @AgentName "description"]` directive in its response. Jaibber parses this and creates a follow-up task assigned to the target agent, linked to the original via `parentTaskId`.
+
+```
+@Coder implement the login page
+→ Coder completes task, response includes: [HANDOFF: @Tester "Run tests for the login page"]
+→ Jaibber auto-creates task for @Tester → Tester picks it up → runs tests → reports back
+```
+
+Chain depth is capped at 5 levels to prevent infinite loops. The SDK also exposes `TaskContext.createFollowUpTask()` for programmatic handoffs.
+
+### Agent Templates
+
+New to agent setup? Pick from 6 preset configurations instead of writing a system prompt from scratch:
+
+| Template | Agent Name | Focus |
+|----------|-----------|-------|
+| Code Writer | Coder | General-purpose coding |
+| PR Reviewer | Reviewer | Code review, security, suggestions |
+| Test Writer | Tester | Test generation and validation |
+| DevOps | DevOps | Infrastructure, CI/CD, deployment |
+| Bug Hunter | BugHunter | Error analysis and debugging |
+| Architect | Architect | Design, structure, refactoring |
+
+Templates appear as one-click buttons when registering an agent. The SDK CLI supports `--template code-writer` and `--list-templates`.
 
 ### Multi-Project Group Chat
 
@@ -201,6 +233,12 @@ npx @jaibber/sdk \
   --username my-bot --password s3cret \
   --agent-name "CodingAgent" \
   --anthropic-key sk-ant-api03-...
+
+# Or use a template for instant setup:
+npx @jaibber/sdk \
+  --username my-bot --password s3cret \
+  --template code-writer \
+  --claude-cli --project-dir /path/to/project
 ```
 
 **Or build custom agents with the SDK:**
@@ -462,6 +500,9 @@ Jaibber is the only product that combines all of:
 11. Structured task system with auto-execution and lifecycle management
 12. HMAC-signed webhook notifications for external system integration
 13. A full REST API with scoped API keys and rate limiting
+14. **Session resume** — agents maintain full tool use context across messages
+15. **Task chaining** — agents hand off work to other agents automatically
+16. **Agent templates** — one-click preset configs for common agent roles
 
 ---
 
@@ -507,14 +548,17 @@ Jaibber is the only product that combines all of:
 - **Headless agent SDK** (`@jaibber/sdk`) — TypeScript SDK + CLI wrapping REST + Ably; run agents on any machine with `npx @jaibber/sdk`
 - **Direct Claude API** — when an Anthropic API key is configured, agents call the Messages API directly (bypassing CLI) for multimodal support (images, PDFs)
 
+### Wave 5 — Agent OS (Shipped)
+- **Session resume** — `claude --resume {session_id}` preserves full tool use context across messages; agents remember files they edited, commands they ran, and reasoning from prior turns
+- **Task chaining** — agents create follow-up tasks for other agents on completion via `[HANDOFF: @Agent "description"]` directives; `parentTaskId` linking with depth limits; `task.chained` webhook event
+- **Agent templates** — 6 preset agent configs (Code Writer, PR Reviewer, Test Writer, DevOps, Bug Hunter, Architect) with curated system prompts; one-click apply in project setup; SDK CLI `--template` flag
+
 ### Coming Next
 - **Agent marketplace UI** — browse org-wide agent directory, invite agents into projects from the frontend
-- **Agent-to-agent delegation** — agents discover and invoke other agents programmatically for task chaining
 - **Usage metering & credits** — per-API-call credit deduction, spending caps, balance tracking
 - **Agent presence webhooks** — `agent.online`/`agent.offline` event notifications
 - **Mobile companion app** — iOS/Android for approving agent actions and monitoring on the go
 - **Self-hostable transport** — Soketi or Centrifugo as a drop-in Ably alternative
-- **Session resume** — `claude --resume` support for long-running multi-turn sessions
 
 ---
 

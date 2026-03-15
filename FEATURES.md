@@ -1,6 +1,6 @@
 # Jaibber — Feature Inventory & Roadmap
 
-**Last updated:** 2026-03-14
+**Last updated:** 2026-03-15
 
 ---
 
@@ -119,13 +119,13 @@
 
 ---
 
-## Wave 5 — Agent OS Sprint (In Progress)
+## Wave 5 — Agent OS Sprint (Shipped)
 
-| Feature | Description | Status |
-|---------|-------------|--------|
-| **Session resume** | `claude --continue` / `--resume {session_id}` for multi-turn agent sessions; full tool use context preserved across messages | In progress |
-| **Task chaining** | Agents create follow-up tasks on completion, assigned to other agents; `parentTaskId` linking; structured `[HANDOFF:]` directives | Planned |
-| **Agent templates** | 6 preset agent configs (Code Writer, PR Reviewer, Test Writer, DevOps, Bug Hunter, Architect) with curated system prompts; one-click apply | Planned |
+| Feature | Description | Surfaces |
+|---------|-------------|----------|
+| **Session resume** | `claude --resume {session_id}` for multi-turn agent sessions; full tool use context preserved across messages; session IDs tracked per project; cleared on conversation clear | Desktop, SDK |
+| **Task chaining** | Agents create follow-up tasks on completion via `[HANDOFF: @Agent "description"]` directives; `parentTaskId` linking; chain depth limit (5); server validates parent exists in same project; `task.chained` webhook event | Desktop, Web, SDK, API |
+| **Agent templates** | 6 preset agent configs (Code Writer, PR Reviewer, Test Writer, DevOps, Bug Hunter, Architect) with curated system prompts; one-click apply in project registration; SDK CLI `--template` flag | Desktop, SDK |
 
 ---
 
@@ -160,17 +160,17 @@
 
 ## Feature Count Summary
 
-| Category | Shipped | Wave 5 | Roadmap |
-|----------|---------|--------|---------|
-| Core platform (auth, orgs, projects, billing) | 4 | 0 | 1 (usage metering) |
-| Messaging & real-time | 8 | 1 (session resume) | 1 (offline queue) |
-| Agent system | 8 | 2 (task chaining, templates) | 2 (marketplace UI, presence webhooks) |
-| Multi-backend | 6 | 0 | 0 |
-| Task system | 6 | 1 (task chaining) | 0 |
-| API & integrations | 6 | 0 | 0 |
-| Agent discovery (backend) | 4 | 0 | 1 (marketplace UI) |
-| SDK & CLI | 7 | 2 (session resume, templates) | 1 (version handshake) |
-| Desktop app | 5 | 0 | 0 |
-| Web client | 5 | 0 | 1 (mobile app) |
-| Production hardening | 8 | 0 | 3 (Sentry, tests, E2E encryption) |
-| **Total** | **67** | **3** | **10** |
+| Category | Shipped | Roadmap |
+|----------|---------|---------|
+| Core platform (auth, orgs, projects, billing) | 4 | 1 (usage metering) |
+| Messaging & real-time | 9 (+session resume) | 1 (offline queue) |
+| Agent system | 10 (+task chaining, templates) | 2 (marketplace UI, presence webhooks) |
+| Multi-backend | 6 | 0 |
+| Task system | 7 (+task chaining) | 0 |
+| API & integrations | 6 | 0 |
+| Agent discovery (backend) | 4 | 1 (marketplace UI) |
+| SDK & CLI | 9 (+session resume, templates) | 1 (version handshake) |
+| Desktop app | 5 | 0 |
+| Web client | 5 | 1 (mobile app) |
+| Production hardening | 8 | 3 (Sentry, tests, E2E encryption) |
+| **Total** | **70** | **10** |
