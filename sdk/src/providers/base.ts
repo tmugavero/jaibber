@@ -40,4 +40,8 @@ export interface GoogleProviderOptions {
 export interface ClaudeCLIProviderOptions {
   /** Working directory for Claude CLI (default: cwd) */
   projectDir?: string;
+  /** Session ID for --resume (resumes a specific prior session) */
+  sessionId?: string;
+  /** If true and no sessionId, use --continue to resume last session in project dir */
+  continueSession?: boolean;
 }

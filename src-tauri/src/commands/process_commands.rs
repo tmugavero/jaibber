@@ -114,6 +114,8 @@ pub async fn run_agent_stream(
     agent_provider: Option<String>,
     custom_command: Option<String>,
     attachments: Option<Vec<AttachmentInfo>>,
+    session_id: Option<String>,
+    continue_session: Option<bool>,
     window: tauri::Window,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), JaibberError> {
@@ -224,7 +226,11 @@ pub async fn run_agent_stream(
         // No API key → fall through to CLI path
     }
 
-    let pcmd = provider.build_stream_cmd(!system_prompt.is_empty());
+    let pcmd = provider.build_stream_cmd(
+        !system_prompt.is_empty(),
+        session_id.as_deref(),
+        continue_session.unwrap_or(false),
+    );
     let provider_kind = provider.kind.clone();
     let reauth_hint = provider.reauth_hint().to_string();
     let install_hint = provider.install_hint().to_string();
@@ -281,6 +287,7 @@ pub async fn run_agent_stream(
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
         let mut got_output = false;
+        let mut emitted_session_id = false;
         let idle_timeout_initial = Duration::from_secs(300);
         let idle_timeout_after_output = Duration::from_secs(60);
 
@@ -288,12 +295,24 @@ pub async fn run_agent_stream(
             let wait = if got_output { idle_timeout_after_output } else { idle_timeout_initial };
             match timeout(wait, lines.next_line()).await {
                 Ok(Ok(Some(line))) => {
-                    let text = extract_text_from_line(&provider_kind, &line);
-                    if !text.is_empty() {
+                    let parsed = extract_text_from_line(&provider_kind, &line);
+
+                    // Emit session ID once when first discovered in stream output
+                    if !emitted_session_id {
+                        if let Some(ref sid) = parsed.session_id {
+                            emitted_session_id = true;
+                            let _ = win.emit("agent-session", serde_json::json!({
+                                "responseId": rid,
+                                "sessionId": sid,
+                            }));
+                        }
+                    }
+
+                    if !parsed.text.is_empty() {
                         got_output = true;
                         let _ = win.emit("agent-chunk", serde_json::json!({
                             "responseId": rid,
-                            "chunk": text,
+                            "chunk": parsed.text,
                             "done": false,
                             "error": null,
                         }));
@@ -512,12 +531,12 @@ async fn retry_with_fallback(
         let wait = if got_output { idle_timeout_after_output } else { idle_timeout_initial };
         match timeout(wait, lines.next_line()).await {
             Ok(Ok(Some(line))) => {
-                let text = extract_text_from_line(provider_kind, &line);
-                if !text.is_empty() {
+                let parsed = extract_text_from_line(provider_kind, &line);
+                if !parsed.text.is_empty() {
                     got_output = true;
                     let _ = window.emit("agent-chunk", serde_json::json!({
                         "responseId": response_id,
-                        "chunk": text,
+                        "chunk": parsed.text,
                         "done": false,
                         "error": null,
                     }));

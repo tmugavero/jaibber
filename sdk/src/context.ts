@@ -252,6 +252,24 @@ export class TaskContext {
     }
   }
 
+  /**
+   * Create a follow-up task assigned to another agent.
+   * Automatically sets parentTaskId to the current task's ID.
+   */
+  async createFollowUpTask(data: {
+    title: string;
+    description?: string;
+    priority?: "low" | "medium" | "high" | "urgent";
+    assignedAgentName?: string;
+  }): Promise<Task> {
+    return this.client.createTask(this.projectId, {
+      ...data,
+      parentTaskId: this.task.id,
+      createdByType: "agent",
+      createdByName: this.agentName,
+    });
+  }
+
   /** Send a chat message (for progress updates). */
   async sendMessage(text: string): Promise<void> {
     const msgId = uuidv4();

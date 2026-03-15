@@ -13,6 +13,7 @@ export interface Task {
   createdByType: "user" | "agent";
   createdByName: string;
   sourceMessageId: string | null;
+  parentTaskId: string | null;
   createdAt: string;
   updatedAt: string;
 }

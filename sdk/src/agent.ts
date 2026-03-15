@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { JaibberClient } from "./client.js";
 import { AblyManager, type AgentPresenceData } from "./ably-manager.js";
 import { MessageContext, TaskContext } from "./context.js";
-import { mentionsAgent, parseMentions } from "./mentions.js";
+import { mentionsAgent } from "./mentions.js";
 import type { Provider } from "./providers/base.js";
 import { AnthropicProvider } from "./providers/anthropic.js";
 import { OpenAIProvider } from "./providers/openai.js";
@@ -60,6 +60,8 @@ export class JaibberAgent extends EventEmitter {
   private history = new Map<string, HistoryEntry[]>();
   /** Track in-flight responses to prevent double-handling. */
   private activeResponses = new Set<string>();
+  /** Session IDs per project for Claude --resume. */
+  private sessionIds = new Map<string, string>();
 
   constructor(config: AgentConfig) {
     super();
@@ -270,10 +272,9 @@ export class JaibberAgent extends EventEmitter {
     // Chain deduplication — already responded
     if (chain.includes(this.config.agentName.toLowerCase())) return false;
 
-    // @mention routing: if message has mentions, only respond if this agent is mentioned.
-    // If no mentions at all, respond (broadcast to all agents).
-    const mentions = parseMentions(text);
-    if (mentions.length > 0 && !mentionsAgent(text, this.config.agentName)) return false;
+    // @mention routing: agent only responds when explicitly @mentioned.
+    // Matches frontend useAbly.ts shouldAgentRespond() behavior.
+    if (!mentionsAgent(text, this.config.agentName)) return false;
 
     return true;
   }
@@ -323,10 +324,16 @@ export class JaibberAgent extends EventEmitter {
 
     // Built-in provider
     if (this.provider) {
+      // Update Claude CLI session state before each invocation
+      this.updateProviderSession(project.id);
+
       const systemPrompt = this.config.agentInstructions ?? "";
       await ctx.stream(() =>
         this.provider!.generate(payload.text, systemPrompt, conversationHistory),
       );
+
+      // Capture session ID from Claude CLI provider after response
+      this.captureProviderSession(project.id);
       return;
     }
 
@@ -407,6 +414,8 @@ export class JaibberAgent extends EventEmitter {
 
       // Built-in provider — generate response from task description
       if (this.provider) {
+        this.updateProviderSession(project.id);
+
         const taskPrompt = task.description
           ? `Task: ${task.title}\n\n${task.description}`
           : `Task: ${task.title}`;
@@ -433,6 +442,7 @@ export class JaibberAgent extends EventEmitter {
               conversationHistory,
             ),
           );
+          this.captureProviderSession(project.id);
           await this.client.updateTask(task.id, { status: "completed" });
         } catch {
           await this.client.updateTask(task.id, { status: "failed" });
@@ -449,6 +459,30 @@ export class JaibberAgent extends EventEmitter {
         await this.client.updateTask(task.id, { status: "failed" });
       } catch {
         // Best-effort
+      }
+    }
+  }
+
+  // ── Session management (Claude --resume) ────────────────────────────
+
+  /** Pass stored session ID to ClaudeCLIProvider before each invocation. */
+  private updateProviderSession(projectId: string): void {
+    if (this.provider instanceof ClaudeCLIProvider) {
+      const sid = this.sessionIds.get(projectId);
+      if (sid) {
+        this.provider.setSessionId(sid);
+      } else {
+        this.provider.clearSession();
+      }
+    }
+  }
+
+  /** After response, capture the session ID from ClaudeCLIProvider if available. */
+  private captureProviderSession(projectId: string): void {
+    if (this.provider instanceof ClaudeCLIProvider) {
+      const sid = this.provider.lastSessionId;
+      if (sid) {
+        this.sessionIds.set(projectId, sid);
       }
     }
   }

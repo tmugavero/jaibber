@@ -9,6 +9,7 @@ import { useOrgStore } from "@/stores/orgStore";
 import { getAbly } from "@/lib/ably";
 import { pushRegistration, deleteRegistration } from "@/lib/agentSync";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { AGENT_TEMPLATES, type AgentTemplate } from "@/lib/agentTemplates";
 import type { LocalProject } from "@/stores/projectStore";
 import type { Contact } from "@/types/contact";
 
@@ -50,6 +51,27 @@ function ProviderSelect({ value, onChange, inputClass }: { value: string; onChan
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
+    </div>
+  );
+}
+
+function TemplateSelector({ onSelect }: { onSelect: (t: AgentTemplate) => void }) {
+  return (
+    <div>
+      <label className="block text-[10px] text-muted-foreground mb-1">Start from a template</label>
+      <div className="flex flex-wrap gap-1.5">
+        {AGENT_TEMPLATES.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onSelect(t)}
+            className="px-2 py-1 rounded text-[10px] bg-muted/50 hover:bg-primary/10 hover:text-primary border border-border/50 transition-colors"
+            title={t.description}
+          >
+            {t.icon} {t.name}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -678,6 +700,11 @@ function ProjectCard({ contact }: { contact: Contact }) {
           <p className="text-[11px] font-medium text-foreground">
             {localAgents.length > 0 ? "Add another agent" : "Register agent"}
           </p>
+          <TemplateSelector onSelect={(t) => {
+            setLinkAgentName(t.agentName);
+            setLinkAgentInstructions(t.instructions);
+            setLinkError(null);
+          }} />
           <input
             type="text"
             value={linkAgentName}
@@ -952,6 +979,11 @@ export function ProjectsPanel() {
           />
           {isTauri && (
             <>
+              <TemplateSelector onSelect={(t) => {
+                setNewAgentName(t.agentName);
+                setNewAgentInstructions(t.instructions);
+                setError(null);
+              }} />
               <input
                 type="text"
                 value={newAgentName}

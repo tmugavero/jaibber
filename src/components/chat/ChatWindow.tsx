@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useChatStore } from "@/stores/chatStore";
 import { useContactStore } from "@/stores/contactStore";
+import { useProjectStore } from "@/stores/projectStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { fetchMessages } from "@/lib/messageApi";
@@ -609,6 +610,11 @@ export function ChatWindow({ contactId, onBack, selectKey }: Props) {
         open={showClearConfirm}
         onConfirm={() => {
           useChatStore.getState().clearConversation(contactId);
+          // Clear session IDs for all local agents on this project (forces new Claude session)
+          const { projects, clearSessionId } = useProjectStore.getState();
+          projects.filter(p => p.projectId === contactId).forEach(p => {
+            clearSessionId(p.projectId, p.agentName);
+          });
           setShowClearConfirm(false);
         }}
         onCancel={() => setShowClearConfirm(false)}

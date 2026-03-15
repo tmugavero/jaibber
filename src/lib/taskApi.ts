@@ -49,6 +49,9 @@ export async function createTask(
     priority?: TaskPriority;
     assignedAgentName?: string;
     sourceMessageId?: string;
+    parentTaskId?: string;
+    createdByType?: "user" | "agent";
+    createdByName?: string;
   },
 ): Promise<Task | null> {
   const res = await fetch(`${apiBaseUrl}/api/projects/${projectId}/tasks`, {

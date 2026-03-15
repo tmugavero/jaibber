@@ -9,6 +9,7 @@ export interface LocalProject {
   agentInstructions: string; // system prompt prepended to every agent call
   agentProvider: string;    // "claude" | "codex" | "gemini" | "custom"
   customCommand?: string;   // for "custom" provider: command template with {prompt} placeholder
+  currentSessionId?: string; // Claude session ID for --resume (persisted across restarts)
 }
 
 interface ProjectStore {
@@ -19,6 +20,10 @@ interface ProjectStore {
   removeAgent: (projectId: string, agentName: string) => void;
   /** Remove ALL agents for a project (used for leave/delete project). */
   removeProject: (projectId: string) => void;
+  /** Store a Claude session ID for resume across messages. */
+  setSessionId: (projectId: string, agentName: string, sessionId: string) => void;
+  /** Clear session ID (e.g. when conversation is cleared). */
+  clearSessionId: (projectId: string, agentName: string) => void;
 }
 
 export const useProjectStore = create<ProjectStore>((set) => ({
@@ -40,4 +45,20 @@ export const useProjectStore = create<ProjectStore>((set) => ({
     })),
   removeProject: (projectId) =>
     set((s) => ({ projects: s.projects.filter((p) => p.projectId !== projectId) })),
+  setSessionId: (projectId, agentName, sessionId) =>
+    set((s) => ({
+      projects: s.projects.map((p) =>
+        p.projectId === projectId && p.agentName === agentName
+          ? { ...p, currentSessionId: sessionId }
+          : p
+      ),
+    })),
+  clearSessionId: (projectId, agentName) =>
+    set((s) => ({
+      projects: s.projects.map((p) =>
+        p.projectId === projectId && p.agentName === agentName
+          ? { ...p, currentSessionId: undefined }
+          : p
+      ),
+    })),
 }));

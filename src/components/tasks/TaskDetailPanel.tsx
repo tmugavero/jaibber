@@ -6,6 +6,35 @@ import { useContactStore } from "@/stores/contactStore";
 import { updateTask, deleteTask } from "@/lib/taskApi";
 import type { Task, TaskStatus, TaskPriority } from "@/types/task";
 
+function ParentTaskLink({ parentTaskId }: { parentTaskId: string }) {
+  const allTasks = useTaskStore((s) => Object.values(s.tasks).flat());
+  const parent = allTasks.find((t) => t.id === parentTaskId);
+  return (
+    <div className="text-[10px] text-muted-foreground bg-muted/30 rounded px-2 py-1.5">
+      <span className="text-primary/70">Chained from:</span>{" "}
+      {parent ? parent.title : parentTaskId.slice(0, 8) + "..."}
+    </div>
+  );
+}
+
+function ChildTasksList({ taskId }: { taskId: string }) {
+  const children = useTaskStore((s) =>
+    Object.values(s.tasks).flat().filter((t) => t.parentTaskId === taskId)
+  );
+  if (children.length === 0) return null;
+  return (
+    <div className="text-[10px] text-muted-foreground bg-muted/30 rounded px-2 py-1.5 space-y-0.5">
+      <div className="text-primary/70">Follow-up tasks:</div>
+      {children.map((c) => (
+        <div key={c.id} className="ml-2">
+          {c.assignedAgentName ? `@${c.assignedAgentName}: ` : ""}{c.title}
+          <span className="ml-1 opacity-60">({c.status})</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const statusOptions: { value: TaskStatus; label: string }[] = [
   { value: "submitted", label: "Submitted" },
   { value: "working", label: "Working" },
@@ -153,6 +182,12 @@ export function TaskDetailPanel({ task, onClose, onDeleted }: Props) {
             </select>
           </div>
         </div>
+
+        {/* Task lineage (parent/child) */}
+        {task.parentTaskId && (
+          <ParentTaskLink parentTaskId={task.parentTaskId} />
+        )}
+        <ChildTasksList taskId={task.id} />
 
         <div className="space-y-1 text-[10px] text-muted-foreground">
           <div>Created by {task.createdByName} ({task.createdByType})</div>

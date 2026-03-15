@@ -216,6 +216,37 @@ export class JaibberClient {
 
   // ── Tasks ───────────────────────────────────────────────────────────
 
+  /** POST /api/projects/{id}/tasks — create a task. */
+  async createTask(
+    projectId: string,
+    data: {
+      title: string;
+      description?: string;
+      priority?: string;
+      assignedAgentName?: string;
+      parentTaskId?: string;
+      createdByType?: "user" | "agent";
+      createdByName?: string;
+    },
+  ): Promise<Task> {
+    const res = await fetch(
+      `${this.serverUrl}/api/projects/${projectId}/tasks`,
+      {
+        method: "POST",
+        headers: this.authHeaders(),
+        body: JSON.stringify(data),
+      },
+    );
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to create task (${res.status}): ${text}`);
+    }
+
+    const result = (await res.json()) as { data: Task };
+    return result.data;
+  }
+
   /** PATCH /api/tasks/{taskId} — update task fields. */
   async updateTask(
     taskId: string,

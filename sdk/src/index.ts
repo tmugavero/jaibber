@@ -4,6 +4,7 @@ export { AnthropicProvider } from "./providers/anthropic.js";
 export { OpenAIProvider } from "./providers/openai.js";
 export { GoogleProvider } from "./providers/google.js";
 export { ClaudeCLIProvider } from "./providers/claude-cli.js";
+export { AGENT_TEMPLATES, getTemplate } from "./templates.js";
 
 export type {
   AgentConfig,
@@ -26,3 +27,5 @@ export type {
   GoogleProviderOptions,
   ClaudeCLIProviderOptions,
 } from "./providers/base.js";
+
+export type { AgentTemplate } from "./templates.js";

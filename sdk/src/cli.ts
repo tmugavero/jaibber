@@ -14,6 +14,7 @@ import { writeFileSync, mkdirSync } from "fs";
 import { execSync } from "child_process";
 import { homedir } from "os";
 import { join } from "path";
+import { AGENT_TEMPLATES, getTemplate } from "./templates.js";
 
 // ── Arg parsing (zero-dep) ──────────────────────────────────────────
 
@@ -61,6 +62,8 @@ OPTIONAL:
   --register                Create a new account (instead of logging into an existing one)
   --create-project <name>   Create a new project and join it (prints project ID on start)
   --install-service         Install as a systemd user service and start it (Linux only)
+  --template <name>         Use a preset agent template (sets agent-name + instructions)
+  --list-templates          Show available agent templates and exit
   --server <url>            Server URL (default: https://api.jaibber.com)
   --instructions <text>     System prompt for the agent
   --machine-name <name>     Machine identifier shown in presence
@@ -117,11 +120,31 @@ ENVIRONMENT VARIABLES:
   process.exit(0);
 }
 
+// ── List templates ──────────────────────────────────────────────────
+
+if (args["list-templates"] === "true") {
+  console.log("\nAvailable agent templates:\n");
+  for (const t of AGENT_TEMPLATES) {
+    console.log(`  ${t.id.padEnd(14)} ${t.name} — ${t.description}`);
+  }
+  console.log(`\nUsage: npx @jaibber/sdk --template code-writer ...`);
+  process.exit(0);
+}
+
+// ── Resolve template ────────────────────────────────────────────────
+
+const templateId = args["template"];
+const template = templateId ? getTemplate(templateId) : undefined;
+if (templateId && !template) {
+  console.error(`Error: unknown template "${templateId}". Use --list-templates to see options.`);
+  process.exit(1);
+}
+
 // ── Validate required args ──────────────────────────────────────────
 
 const username = args["username"];
 const password = args["password"] || process.env.JAIBBER_PASSWORD;
-const agentName = args["agent-name"];
+const agentName = args["agent-name"] || template?.agentName;
 const serverUrl =
   args["server"] || "https://api.jaibber.com";
 const anthropicKey =
@@ -132,7 +155,7 @@ const googleKey =
   args["google-key"] || process.env.GOOGLE_API_KEY;
 const useClaudeCli = args["claude-cli"] === "true";
 const projectDir = args["project-dir"];
-const instructions = args["instructions"];
+const instructions = args["instructions"] || template?.instructions;
 const machineName = args["machine-name"];
 const shouldRegister = args["register"] === "true";
 const createProjectName = args["create-project"];

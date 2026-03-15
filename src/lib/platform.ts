@@ -129,6 +129,8 @@ export async function runAgentStream(params: {
     fileSize: number;
     blobUrl: string;
   }>;
+  sessionId?: string;
+  continueSession?: boolean;
 }): Promise<void> {
   if (!isTauri) {
     throw new Error("Agent streaming is only available on desktop agent machines.");

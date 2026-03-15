@@ -9,7 +9,7 @@ import { useProjectStore, type LocalProject } from "@/stores/projectStore";
 import { runAgentStream, listenEvent, isTauri } from "@/lib/platform";
 import { parseMentions, mentionsAgent } from "@/lib/mentions";
 import { persistMessage } from "@/lib/messageApi";
-import { updateTask } from "@/lib/taskApi";
+import { updateTask, createTask } from "@/lib/taskApi";
 import { useTaskStore } from "@/stores/taskStore";
 import type { AblyMessage, ExecutionMode } from "@/types/message";
 import type { MessageAttachment } from "@/types/attachment";
@@ -20,6 +20,9 @@ import type * as Ably from "ably";
 
 /** Max depth for agent-to-agent response chains. Prevents infinite loops. */
 const MAX_RESPONSE_DEPTH = 3;
+
+/** Max depth for task chaining. Prevents infinite HANDOFF loops. */
+const MAX_TASK_CHAIN_DEPTH = 5;
 
 /** Plan-mode system prompt prefix — instructs agent to analyze only, not execute. */
 const PLAN_MODE_PREFIX =
@@ -101,8 +104,8 @@ async function respondToMessage(
     } satisfies AblyMessage);
   };
 
-  // Cleanup helper — unlistens both chunk and auth-fallback events
-  const cleanup = () => { unlisten(); unlistenAuth(); };
+  // Cleanup helper — unlistens chunk, auth-fallback, and session events
+  const cleanup = () => { unlisten(); unlistenAuth(); unlistenSession(); };
 
   // Listen for streaming events from Rust
   const unlisten = await listenEvent<{
@@ -202,6 +205,19 @@ async function respondToMessage(
     useChatStore.getState().appendChunk(convId, responseId, notice);
   });
 
+  // Listen for session ID events — persist for future --resume calls
+  const unlistenSession = await listenEvent<{
+    responseId: string;
+    sessionId: string;
+  }>("agent-session", (event) => {
+    if (event.responseId !== responseId) return;
+    useProjectStore.getState().setSessionId(
+      localProject.projectId,
+      agentName,
+      event.sessionId,
+    );
+  });
+
   // Inline file attachments into the prompt so the agent can see them
   let fullPrompt = promptText;
   if (attachments?.length) {
@@ -232,6 +248,11 @@ async function respondToMessage(
 
   // Kick off streaming agent process
   try {
+    // Session resume: pass stored session ID for Claude --resume.
+    // Only use --continue if we have a stored session ID that was previously set
+    // (not on first message — avoids resuming unrelated sessions in the same directory).
+    const sessionId = localProject.currentSessionId;
+
     await runAgentStream({
       prompt: fullPrompt,
       projectDir: localProject.projectDir,
@@ -246,6 +267,7 @@ async function respondToMessage(
         fileSize: att.fileSize,
         blobUrl: att.blobUrl,
       })),
+      sessionId,
     });
   } catch (err) {
     if (flushTimer) clearTimeout(flushTimer);
@@ -439,6 +461,44 @@ function subscribeToProjectChannel(
                 updateTask(url3, t3, data.task.id, {
                   status: success ? "completed" : "failed",
                 }).catch((e) => console.error('[useAbly] updateTask(result) failed:', e.message));
+
+                // Task chaining: parse [HANDOFF: @Agent "description"] from agent's response
+                if (success) {
+                  // Calculate chain depth to prevent infinite loops
+                  let chainDepth = 0;
+                  let parentId = data.task.parentTaskId;
+                  const allTasks = Object.values(useTaskStore.getState().tasks).flat();
+                  while (parentId && chainDepth < MAX_TASK_CHAIN_DEPTH) {
+                    chainDepth++;
+                    const parent = allTasks.find((t) => t.id === parentId);
+                    parentId = parent?.parentTaskId ?? null;
+                  }
+
+                  if (chainDepth < MAX_TASK_CHAIN_DEPTH) {
+                    const msgs = useChatStore.getState().messages[contact.id] ?? [];
+                    const agentResponse = [...msgs].reverse().find(
+                      (m) => m.senderName === lp.agentName && m.status === "done"
+                    );
+                    if (agentResponse?.text) {
+                      const handoffPattern = /\[HANDOFF:\s*@([a-zA-Z0-9_-]+)\s+"([^"]+)"\]/g;
+                      let match;
+                      while ((match = handoffPattern.exec(agentResponse.text)) !== null) {
+                        const targetAgent = match[1];
+                        const handoffDesc = match[2];
+                        createTask(url3, t3, contact.id, {
+                          title: handoffDesc,
+                          description: `Follow-up from task "${data.task.title}" completed by @${lp.agentName}`,
+                          assignedAgentName: targetAgent,
+                          parentTaskId: data.task.id,
+                          createdByType: "agent",
+                          createdByName: lp.agentName,
+                        }).catch((e) => console.error('[useAbly] createTask(handoff) failed:', e.message));
+                      }
+                    }
+                  } else {
+                    console.warn(`[useAbly] Task chain depth limit (${MAX_TASK_CHAIN_DEPTH}) reached, skipping HANDOFF`);
+                  }
+                }
               }
             }
           );

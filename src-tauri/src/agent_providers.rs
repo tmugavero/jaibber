@@ -103,22 +103,46 @@ impl ProviderConfig {
     }
 
     /// Build the CLI command for streaming execution.
-    pub fn build_stream_cmd(&self, has_system_prompt: bool) -> ProviderCommand {
+    /// `session_id`: if Some, appends `--resume <id>` for Claude to resume a prior session.
+    /// If `continue_session` is true and no session_id, appends `--continue` to resume the
+    /// most recent session in the project directory.
+    pub fn build_stream_cmd(
+        &self,
+        has_system_prompt: bool,
+        session_id: Option<&str>,
+        continue_session: bool,
+    ) -> ProviderCommand {
         let env = build_shell_env();
         match self.kind {
             ProviderKind::Claude => {
+                // Build session flags (only for Claude)
+                // Session IDs must be validated to prevent command injection —
+                // only allow UUID-like strings (alphanumeric + hyphens).
+                let session_flag = if let Some(sid) = session_id {
+                    if sid.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') && !sid.is_empty() {
+                        format!(" --resume {}", sid)
+                    } else {
+                        tracing::warn!("Invalid session_id rejected (possible injection): {:?}", sid);
+                        String::new()
+                    }
+                } else if continue_session {
+                    " --continue".to_string()
+                } else {
+                    String::new()
+                };
+
                 let cmd = if has_system_prompt {
                     format!(
-                        "{}\nclaude --print --verbose --output-format stream-json \
+                        "{}\nclaude --print --verbose --output-format stream-json{} \
                          --append-system-prompt \"$JAIBBER_SYSTEM\" \
                          --dangerously-skip-permissions \"$JAIBBER_PROMPT\"",
-                        env
+                        env, session_flag
                     )
                 } else {
                     format!(
-                        "{}\nclaude --print --verbose --output-format stream-json \
+                        "{}\nclaude --print --verbose --output-format stream-json{} \
                          --dangerously-skip-permissions \"$JAIBBER_PROMPT\"",
-                        env
+                        env, session_flag
                     )
                 };
                 ProviderCommand {
@@ -217,29 +241,44 @@ impl ProviderConfig {
 
 // ── Output parsing ────────────────────────────────────────────────────
 
+/// Parsed result from a stream output line.
+pub struct ParsedLine {
+    /// Text content to display (empty if line should be skipped).
+    pub text: String,
+    /// Session ID if found in this line (Claude only — from initial message event).
+    pub session_id: Option<String>,
+}
+
 /// Extract text content from a stream output line, based on the provider.
-/// Returns the extracted text, or empty string if the line should be skipped.
-pub fn extract_text_from_line(kind: &ProviderKind, line: &str) -> String {
+/// Returns parsed text and optional session metadata.
+pub fn extract_text_from_line(kind: &ProviderKind, line: &str) -> ParsedLine {
     match kind {
         ProviderKind::Claude => extract_text_claude(line),
         // Codex, Gemini, and Custom all use raw text output (no JSON parsing needed)
-        _ => {
-            if line.trim().is_empty() {
+        _ => ParsedLine {
+            text: if line.trim().is_empty() {
                 String::new()
             } else {
                 format!("{}\n", line)
-            }
-        }
+            },
+            session_id: None,
+        },
     }
 }
 
 /// Claude-specific: parse stream-json event format.
-fn extract_text_claude(line: &str) -> String {
+/// Extracts text content and session_id (from initial system/result events).
+fn extract_text_claude(line: &str) -> ParsedLine {
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
+        // Extract session_id if present (appears in init/system/result messages)
+        let session_id = json.get("session_id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
         // Partial content block delta: {"type":"content_block_delta","delta":{"type":"text_delta","text":"..."}}
         if let Some(delta) = json.get("delta") {
             if let Some(text) = delta.get("text").and_then(|t| t.as_str()) {
-                return text.to_string();
+                return ParsedLine { text: text.to_string(), session_id };
             }
         }
 
@@ -256,15 +295,15 @@ fn extract_text_claude(line: &str) -> String {
                     }
                 }
             }
-            return text;
+            return ParsedLine { text, session_id };
         }
 
-        String::new()
+        ParsedLine { text: String::new(), session_id }
     } else if !line.trim().is_empty() {
         // Non-JSON line from Claude — emit as raw text (fallback)
-        format!("{}\n", line)
+        ParsedLine { text: format!("{}\n", line), session_id: None }
     } else {
-        String::new()
+        ParsedLine { text: String::new(), session_id: None }
     }
 }
 
